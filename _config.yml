@@ -1,0 +1,12 @@
+title: RETRO
+description: Tiny retro games in a green phosphor terminal
+baseurl: "/retro"
+url: ""
+lang: en
+theme_color: "#020a02"
+exclude:
+  - README.md
+  - docs
+  - Gemfile
+  - Gemfile.lock
+  - vendor

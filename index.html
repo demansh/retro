@@ -1,0 +1,27 @@
+---
+layout: default
+---
+<main class="terminal crt">
+  <div class="terminal__screen">
+    <header class="terminal__header">
+      <h1 class="terminal__title glow">{{ site.title }}</h1>
+      <p class="terminal__line boot-line" style="--boot-delay: 0.2s">RETRO TERMLINK PROTOCOL V1.0</p>
+      <p class="terminal__line boot-line" style="--boot-delay: 0.5s">64K RAM SYSTEM :: {{ site.data.games.size }} PROGRAM(S) LOADED</p>
+    </header>
+    <nav class="menu boot-line" style="--boot-delay: 0.9s" aria-label="Games">
+      <ul class="menu__list">
+        {% for game in site.data.games %}
+        <li>
+          <a class="menu__item" href="{{ game.url | relative_url }}" data-game="{{ game.id }}">
+            <span class="menu__title">{{ game.title }}</span>
+            <span class="menu__tagline">{{ game.tagline }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </nav>
+    <p class="terminal__prompt boot-line" style="--boot-delay: 1.2s">&gt; <span class="cursor">_</span></p>
+    <footer class="terminal__footer boot-line" style="--boot-delay: 1.4s">TAP A PROGRAM TO RUN</footer>
+  </div>
+</main>
+<script type="module" src="{{ '/assets/js/menu.js' | relative_url }}"></script>

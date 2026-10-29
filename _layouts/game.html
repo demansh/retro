@@ -1,0 +1,14 @@
+---
+layout: default
+body_class: game-page
+---
+<main class="game-stage">
+  <canvas id="screen" class="game-screen" aria-label="{{ page.title }}"></canvas>
+</main>
+<div class="rotate-notice crt" role="alert">
+  <div class="rotate-notice__icon" aria-hidden="true"></div>
+  <p class="glow">ROTATE DEVICE</p>
+</div>
+<noscript><p class="system-message glow">JAVASCRIPT REQUIRED</p></noscript>
+{{ content }}
+<script type="module" src="{{ page.script | relative_url }}"></script>
