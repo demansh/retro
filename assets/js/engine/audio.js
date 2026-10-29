@@ -5,6 +5,11 @@ export function createAudio() {
   let context = null;
   let master = null;
   let noiseBuffer = null;
+  let isMuted = false;
+
+  function masterVolume() {
+    return isMuted ? 0 : MASTER_VOLUME;
+  }
 
   function unlock() {
     try {
@@ -15,7 +20,7 @@ export function createAudio() {
         }
         context = new AudioContextClass();
         master = context.createGain();
-        master.gain.value = MASTER_VOLUME;
+        master.gain.value = masterVolume();
         master.connect(context.destination);
         noiseBuffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
         const samples = noiseBuffer.getChannelData(0);
@@ -33,7 +38,14 @@ export function createAudio() {
   }
 
   function isReady() {
-    return context !== null && context.state === "running";
+    return !isMuted && context !== null && context.state === "running";
+  }
+
+  function setMuted(shouldMute) {
+    isMuted = Boolean(shouldMute);
+    if (context && master) {
+      master.gain.setValueAtTime(masterVolume(), context.currentTime);
+    }
   }
 
   function envelope(startTime, duration, volume) {
@@ -74,5 +86,5 @@ export function createAudio() {
     source.start(startTime, Math.random() * 0.5, duration + 0.02);
   }
 
-  return { unlock, tone, noise };
+  return { unlock, setMuted, tone, noise };
 }

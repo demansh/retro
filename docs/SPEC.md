@@ -23,13 +23,16 @@
 - Главная: заголовок `RETRO`, вертикальное меню игр в стиле терминала (`> PONG`), мигающий курсор.
   Пункт выбирается тапом или клавиатурой (стрелки + Enter).
 - Шрифт VT323 (OFL), подключается локально в woff2, чтобы работал офлайн. Сторонних CDN нет.
-- Цвета: фон `#020a02`, люминофор `#33ff66`, монохром. На меню — CSS-оверлей сканлайнов, виньетка, мерцание.
+- Цвета: монохром, по умолчанию фон `#020a02`, люминофор `#33ff66`. Палитры люминофора (GREEN, AMBER, WHITE,
+  CYAN, PINK) выбираются в Settings и задаются в `site.css`. На меню — CSS-оверлей сканлайнов, виньетка, мерцание.
+- Settings: на главной (пункт меню) и в паузе каждой игры; SOUND ON/OFF и COLOR; общие для всего сайта,
+  хранятся в localStorage (`retro:settings:v1`).
 
 ### 2. Структура репозитория
 ```
 _config.yml  _layouts/{default,game}.html  _data/games.yml  index.html
 assets/css/site.css  assets/fonts/vt323.woff2  assets/icons/*  assets/js/menu.js
-assets/js/engine/{loop,screen,crt,input,collision,particles,glitch,audio,storage,pixelfont}.js
+assets/js/engine/{loop,screen,crt,input,collision,particles,glitch,audio,storage,settings,pixelfont}.js
 games/pong/{index.html,pong.js}
 manifest.webmanifest  sw.js
 ```
@@ -45,6 +48,7 @@ manifest.webmanifest  sw.js
 - `input` — распознавание жестов на Pointer Events (см. п. 5).
 - `audio` — синтез звуков square/noise в Web Audio; AudioContext разблокируется первым тапом.
 - `storage` — обёртка над localStorage с версионированием ключей и try/catch (приватный режим, квота).
+- `settings` — глобальные настройки (звук, цвет) поверх `storage`, синхронизация между вкладками.
 
 ### 4. ЭЛТ и глитчи (главный фокус)
 Постоянные эффекты (шейдер):

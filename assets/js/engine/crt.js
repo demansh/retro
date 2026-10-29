@@ -1,7 +1,11 @@
 const POWER_ON_SECONDS = 0.6;
 const POWER_OFF_SECONDS = 0.35;
 const PERSISTENCE_PER_FRAME = 0.72;
-const PHOSPHOR_TINT = "#33ff66";
+const DEFAULT_PALETTE = {
+  phosphor: [0.2, 1.0, 0.4],
+  ghost: [0.65, 1.0, 0.2],
+  background: [0.008, 0.04, 0.008],
+};
 
 const VERTEX_SHADER = `
 attribute vec2 aPosition;
@@ -45,10 +49,9 @@ uniform float uFlash;
 uniform float uFlicker;
 uniform float uBloom;
 uniform float uPower;
-
-const vec3 PHOSPHOR = vec3(0.2, 1.0, 0.4);
-const vec3 GHOST = vec3(0.65, 1.0, 0.2);
-const vec3 BACKGROUND = vec3(0.008, 0.04, 0.012);
+uniform vec3 uPhosphorColor;
+uniform vec3 uGhostColor;
+uniform vec3 uBackgroundColor;
 
 float hash(vec2 point) {
   return fract(sin(dot(point, vec2(12.9898, 78.233))) * 43758.5453);
@@ -105,12 +108,12 @@ void main() {
   float scan = 0.5 + 0.5 * cos(6.2831853 * (uv.y * uSourceSize.y - 0.5));
   float intensity = base * mix(1.0 - scanStrength, 1.0, scan) + glow * 0.55;
 
-  vec3 color = BACKGROUND + PHOSPHOR * intensity + GHOST * ghost * 0.5;
+  vec3 color = uBackgroundColor + uPhosphorColor * intensity + uGhostColor * ghost * 0.5;
   float barPosition = 1.0 - fract(uTime * 0.11);
-  color += PHOSPHOR * (1.0 - smoothstep(0.0, 0.08, abs(vUv.y - barPosition))) * 0.035;
+  color += uPhosphorColor * (1.0 - smoothstep(0.0, 0.08, abs(vUv.y - barPosition))) * 0.035;
   color += (hash(vUv * uOutputSize + fract(uTime) * 100.0) - 0.5) * 0.05;
   color *= uFlicker;
-  color += PHOSPHOR * uFlash * 0.6;
+  color += uPhosphorColor * uFlash * 0.6;
 
   vec2 vignetteUv = tube * (1.0 - tube.yx);
   color *= pow(clamp(vignetteUv.x * vignetteUv.y * 16.0, 0.0, 1.0), 0.22);
@@ -288,6 +291,9 @@ function createWebGlRenderer(canvas, gl, buffer) {
     gl.uniform1f(uniforms.uFlicker, state.flicker);
     gl.uniform1f(uniforms.uBloom, isBloomEnabled ? 1 : 0);
     gl.uniform1f(uniforms.uPower, state.power);
+    gl.uniform3fv(uniforms.uPhosphorColor, state.palette.phosphor);
+    gl.uniform3fv(uniforms.uGhostColor, state.palette.ghost);
+    gl.uniform3fv(uniforms.uBackgroundColor, state.palette.background);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     readIndex = writeIndex;
@@ -320,6 +326,11 @@ function createWebGlRenderer(canvas, gl, buffer) {
   };
 }
 
+function toCssColor(channels, alpha = 1) {
+  const [red, green, blue] = channels.map((channel) => Math.round(channel * 255));
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 function createCanvasRenderer(canvas, buffer) {
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) {
@@ -348,7 +359,7 @@ function createCanvasRenderer(canvas, buffer) {
       context.drawImage(buffer.canvas, 0, sourceY, buffer.width, sourceHeight, left + state.bandOffset * targetWidth, top + sourceY * rowHeight, targetWidth, sourceHeight * rowHeight);
     }
     context.globalCompositeOperation = "multiply";
-    context.fillStyle = PHOSPHOR_TINT;
+    context.fillStyle = toCssColor(state.palette.phosphor);
     context.fillRect(0, 0, width, height);
     context.globalCompositeOperation = "source-over";
     const rowHeight = height / buffer.height;
@@ -360,7 +371,7 @@ function createCanvasRenderer(canvas, buffer) {
     }
     const flash = state.flash + state.powerGlow;
     if (flash > 0) {
-      context.fillStyle = `rgba(51, 255, 102, ${Math.min(flash * 0.4, 0.8)})`;
+      context.fillStyle = toCssColor(state.palette.phosphor, Math.min(flash * 0.4, 0.8));
       context.fillRect(0, 0, width, height);
     }
   }
@@ -391,11 +402,16 @@ export function createCrt(canvas, buffer, { reducedMotion = false } = {}) {
   const power = createPower(reducedMotion);
   const renderer = createRenderer(canvas, buffer);
   let time = 0;
+  let palette = DEFAULT_PALETTE;
 
   function render(effects, frameSeconds) {
     time += frameSeconds;
     power.update(frameSeconds);
-    renderer.draw({ ...effects, ...power.uniforms(), time }, frameSeconds);
+    renderer.draw({ ...effects, ...power.uniforms(), time, palette }, frameSeconds);
+  }
+
+  function setPalette(nextPalette) {
+    palette = nextPalette ?? DEFAULT_PALETTE;
   }
 
   return {
@@ -403,6 +419,7 @@ export function createCrt(canvas, buffer, { reducedMotion = false } = {}) {
     isAccelerated: renderer.isAccelerated,
     render,
     setQuality: renderer.setQuality,
+    setPalette,
     powerOn: () => power.animate(1, POWER_ON_SECONDS),
     powerOff: () => power.animate(0, POWER_OFF_SECONDS),
   };

@@ -7,7 +7,8 @@ import { overlaps, sweptAabb } from "../../assets/js/engine/collision.js";
 import { createParticles } from "../../assets/js/engine/particles.js";
 import { createAudio } from "../../assets/js/engine/audio.js";
 import { createStore } from "../../assets/js/engine/storage.js";
-import { drawText } from "../../assets/js/engine/pixelfont.js";
+import { createSettings, readPalette } from "../../assets/js/engine/settings.js";
+import { drawText, measureText } from "../../assets/js/engine/pixelfont.js";
 
 const WIDTH = 192;
 const HEIGHT = 108;
@@ -37,8 +38,10 @@ const PAUSE_ITEM_SPACING = 12;
 const PAUSE_ITEMS = [
   { id: "continue", label: "CONTINUE" },
   { id: "restart", label: "RESTART" },
+  { id: "settings", label: "SETTINGS" },
   { id: "exit", label: "EXIT" },
 ];
+const BACK_ITEM = { id: "back", label: "BACK" };
 const CONTROLLABLE_STATES = new Set(["title", "serve", "play", "point"]);
 const COLORS = {
   bright: "#ffffff",
@@ -100,6 +103,7 @@ function startGame() {
   const particles = createParticles(320);
   const audio = createAudio();
   const sounds = createSounds(audio);
+  const settings = createSettings();
   const recordsStore = createStore("pong", 1, { wins: 0, losses: 0, currentStreak: 0, bestStreak: 0, longestRally: 0 });
   let records = sanitizeRecords(recordsStore.load());
 
@@ -125,6 +129,7 @@ function startGame() {
     rally: 0,
     pointsPlayed: 0,
     pauseIndex: 0,
+    pauseView: "main",
     winner: null,
   };
   const ai = { target: HEIGHT / 2, reactionTimer: 0, aimError: 0, wasApproaching: false };
@@ -337,6 +342,7 @@ function startGame() {
     game.resumeState = game.state;
     game.state = "paused";
     game.pauseIndex = 0;
+    game.pauseView = "main";
     sounds.pause();
   }
 
@@ -368,9 +374,28 @@ function startGame() {
     });
   }
 
-  function activatePauseItem(index) {
-    const item = PAUSE_ITEMS[index];
+  function currentPauseItems() {
+    return game.pauseView === "settings" ? [...settings.menuItems(), BACK_ITEM] : PAUSE_ITEMS;
+  }
+
+  function openPauseView(view) {
+    game.pauseIndex = view === "settings" ? 0 : PAUSE_ITEMS.findIndex((item) => item.id === "settings");
+    game.pauseView = view;
+  }
+
+  function movePauseSelection(step) {
+    const itemCount = currentPauseItems().length;
+    game.pauseIndex = (game.pauseIndex + step + itemCount) % itemCount;
+    sounds.select();
+  }
+
+  function activatePauseItem(index, step = 1) {
+    const item = currentPauseItems()[index];
     if (!item) {
+      return;
+    }
+    if (settings.activate(item.id, step)) {
+      sounds.select();
       return;
     }
     sounds.select();
@@ -378,6 +403,10 @@ function startGame() {
       resume();
     } else if (item.id === "restart") {
       startMatch();
+    } else if (item.id === "settings") {
+      openPauseView("settings");
+    } else if (item.id === "back") {
+      openPauseView("main");
     } else if (item.id === "exit") {
       exitToMenu();
     }
@@ -386,7 +415,7 @@ function startGame() {
   function pauseItemAt(point) {
     const index = Math.round((point.y - PAUSE_MENU_TOP - 2) / PAUSE_ITEM_SPACING);
     const itemCenterY = PAUSE_MENU_TOP + 2 + index * PAUSE_ITEM_SPACING;
-    return index >= 0 && index < PAUSE_ITEMS.length && Math.abs(point.y - itemCenterY) <= PAUSE_ITEM_SPACING / 2 ? index : -1;
+    return index >= 0 && index < currentPauseItems().length && Math.abs(point.y - itemCenterY) <= PAUSE_ITEM_SPACING / 2 ? index : -1;
   }
 
   function handleAction(point) {
@@ -411,14 +440,19 @@ function startGame() {
   function handleKey(code) {
     if (code === "Space" || code === "Enter") {
       handleAction(null);
+    } else if (code === "Escape" && game.state === "paused" && game.pauseView === "settings") {
+      sounds.select();
+      openPauseView("main");
     } else if (code === "Escape" || code === "KeyP") {
       togglePause();
     } else if (game.state === "paused" && (code === "ArrowUp" || code === "KeyW")) {
-      game.pauseIndex = (game.pauseIndex + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length;
-      sounds.select();
+      movePauseSelection(-1);
     } else if (game.state === "paused" && (code === "ArrowDown" || code === "KeyS")) {
-      game.pauseIndex = (game.pauseIndex + 1) % PAUSE_ITEMS.length;
-      sounds.select();
+      movePauseSelection(1);
+    } else if (game.state === "paused" && game.pauseView === "settings" && (code === "ArrowLeft" || code === "KeyA")) {
+      activatePauseItem(game.pauseIndex, -1);
+    } else if (game.state === "paused" && game.pauseView === "settings" && (code === "ArrowRight" || code === "KeyD")) {
+      activatePauseItem(game.pauseIndex, 1);
     }
   }
 
@@ -536,13 +570,13 @@ function startGame() {
 
   function drawPauseMenu() {
     drawVeil();
-    drawCenteredText("PAUSED", 18, { scale: 2, color: COLORS.bright });
-    PAUSE_ITEMS.forEach((item, index) => {
+    drawCenteredText(game.pauseView === "settings" ? "SETTINGS" : "PAUSED", 18, { scale: 2, color: COLORS.bright });
+    currentPauseItems().forEach((item, index) => {
       const isSelected = index === game.pauseIndex;
       const y = PAUSE_MENU_TOP + index * PAUSE_ITEM_SPACING;
       drawCenteredText(item.label, y, { color: isSelected ? COLORS.bright : COLORS.dim });
       if (isSelected) {
-        drawText(buffer.context, ">", WIDTH / 2 - 26, y, { color: COLORS.bright });
+        drawText(buffer.context, ">", Math.floor(WIDTH / 2 - measureText(item.label) / 2) - 8, y, { color: COLORS.bright });
       }
     });
     drawCenteredText(`BEST STREAK ${records.bestStreak}   LONGEST RALLY ${records.longestRally}`, 94, { color: COLORS.faint });
@@ -629,6 +663,11 @@ function startGame() {
 
   window.addEventListener("storage", () => {
     records = sanitizeRecords(recordsStore.load());
+  });
+
+  settings.onChange(({ sound }) => {
+    audio.setMuted(!sound);
+    crt.setPalette(readPalette());
   });
 
   const loop = createLoop({

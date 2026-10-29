@@ -27,13 +27,19 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 - `glitch` effect scheduler: `trigger("tear" | "hit" | "goal")`, pass `uniforms()` to `crt.render`.
 - `input` gesture recognizer; call `audio.unlock()` from `onInteraction` (needed on iOS).
 - `collision` (`overlaps`, `sweptAabb` — use swept for fast objects), `particles` (pooled pixel bursts),
-  `audio` (synthesized square/noise SFX, no audio files), `storage` (`createStore(id, version, defaults)`).
+  `audio` (synthesized square/noise SFX, no audio files, `setMuted`), `storage` (`createStore(id, version, defaults)`).
+- `settings` global user settings (`sound`, `color`) in `retro:settings:v1`: `createSettings()` with `onChange`,
+  `menuItems()` / `activate(id, step)` for menus, `readPalette()` for `crt.setPalette`.
+- Palettes live only in `site.css` (`:root[data-color=...]` RGB triplets); the shader reads them via `readPalette()`.
+  To add a color: a CSS block + an entry in `COLOR_OPTIONS`.
 
 ## Adding a game
 1. `games/<id>/index.html` with front matter: `layout: game`, `title`, `description`, `script: /games/<id>/<id>.js`.
 2. `games/<id>/<id>.js` — use `games/pong/pong.js` as the reference for wiring: buffer → crt → display → glitch,
    input handlers, state machine (title / play / paused / over), pause menu, exit via `crt.powerOff()` then
    navigate to `document.body.dataset.home`, records via `createStore("<id>", 1, defaults)` with sanitizing.
+   Pause menu must include `SETTINGS` (sub-view from `settings.menuItems()` + `BACK`), and wire
+   `settings.onChange(({ sound }) => { audio.setMuted(!sound); crt.setPalette(readPalette()); })`.
 3. Add an entry to `_data/games.yml` (`id`, `title`, `tagline`, `url`). The menu renders from it.
 4. Nothing to do for offline: `sw.js` precaches all pages and static files at build time.
 5. Generic helpers belong in `engine/`; game-specific code stays in the game folder.

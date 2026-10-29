@@ -8,6 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <script>
+    try {
+      const savedSettings = JSON.parse(window.localStorage.getItem("retro:settings:v1"));
+      if (savedSettings && typeof savedSettings.color === "string") {
+        document.documentElement.dataset.color = savedSettings.color;
+      }
+    } catch (error) {
+      console.warn("Unable to restore color settings", error);
+    }
+  </script>
   <title>{% if page.title %}{{ page.title }} :: {% endif %}{{ site.title }}</title>
   <link rel="preload" href="{{ '/assets/fonts/vt323.woff2' | relative_url }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}">
