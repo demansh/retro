@@ -2,3 +2,7 @@
   title: PONG
   tagline: 1 PLAYER VS CPU
   url: /games/pong/
+- id: runner
+  title: RUNNER
+  tagline: JUMP THE OBSTACLES
+  url: /games/runner/
