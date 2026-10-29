@@ -6,6 +6,7 @@ lang: en
 theme_color: "#020a02"
 exclude:
   - README.md
+  - CLAUDE.md
   - docs
   - Gemfile
   - Gemfile.lock
