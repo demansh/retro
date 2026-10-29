@@ -37,11 +37,14 @@ const SWIPE_THRESHOLD = 6;
 const TITLE_SPEED = 40;
 const START_SPEED = 82;
 const MAX_SPEED = 210;
-const ACCELERATION = 2.2;
+const ACCELERATION = 3.3;
 const FLYER_EXTRA_SPEED = 22;
 const FLYER_CLEARANCE = 8;
 const FLYER_WIDTH = 7;
 const FLYER_HEIGHT = 4;
+const BEAM_CLEARANCE = 14;
+const BEAM_THICKNESS = 4;
+const BEAM_STRIPE_PERIOD = 4;
 const PIXELS_PER_POINT = 6;
 const MILESTONE_POINTS = 100;
 const GAP_BASE = 26;
@@ -79,6 +82,7 @@ const COLORS = {
   faint: "#505050",
   hillLine: "#404040",
   hillFill: "#161616",
+  slabFill: "#2a2a2a",
   black: "#000000",
   veil: "rgba(0, 0, 0, 0.78)",
 };
@@ -239,6 +243,7 @@ function startGame() {
       { kind: "cluster", weight: score >= 60 ? 2 : 0 },
       { kind: "pit", weight: score >= 40 ? 3 : 0 },
       { kind: "flyer", weight: score >= 150 ? 2.5 : 0 },
+      { kind: "beam", weight: score >= 80 ? 2.5 : 0 },
     ];
     const totalWeight = options.reduce((sum, option) => sum + option.weight, 0);
     let roll = Math.random() * totalWeight;
@@ -283,7 +288,13 @@ function startGame() {
     return FLYER_WIDTH + lead;
   }
 
-  const SPAWNERS = { block: spawnBlock, cluster: spawnCluster, pit: spawnPit, flyer: spawnFlyer };
+  function spawnBeam(x) {
+    const width = randomInt(20, 40);
+    game.obstacles.push({ kind: "beam", x, y: 0, w: width, h: GROUND_Y - BEAM_CLEARANCE });
+    return width;
+  }
+
+  const SPAWNERS = { block: spawnBlock, cluster: spawnCluster, pit: spawnPit, flyer: spawnFlyer, beam: spawnBeam };
 
   function spawnObstacles() {
     while (game.nextSpawnX < game.distance + WIDTH + SPAWN_MARGIN) {
@@ -666,7 +677,6 @@ function startGame() {
     },
     onMenu: togglePause,
     isMenuZone: menuButton.containsClient,
-    onEdgeSwipe: exitToMenu,
     onKey: handleKey,
   });
 
@@ -761,12 +771,26 @@ function startGame() {
     buffer.rect(x + 3, isWingUp ? obstacle.y : obstacle.y + 3, 3, 1, COLORS.bright);
   }
 
+  function drawBeam(obstacle) {
+    const x = screenX(obstacle);
+    const beamTop = obstacle.h - BEAM_THICKNESS;
+    buffer.rect(x, 0, obstacle.w, beamTop, COLORS.slabFill);
+    buffer.rect(x, 0, 1, beamTop, COLORS.dim);
+    buffer.rect(x + obstacle.w - 1, 0, 1, beamTop, COLORS.dim);
+    buffer.rect(x, beamTop, obstacle.w, BEAM_THICKNESS, COLORS.bright);
+    for (let offset = 1; offset < obstacle.w - 1; offset += BEAM_STRIPE_PERIOD) {
+      buffer.rect(x + offset, beamTop + 1, Math.min(2, obstacle.w - 1 - offset), BEAM_THICKNESS - 2, COLORS.crateInner);
+    }
+  }
+
   function drawObstacles() {
     for (const obstacle of game.obstacles) {
       if (obstacle.kind === "block") {
         drawBlock(obstacle);
       } else if (obstacle.kind === "flyer") {
         drawFlyer(obstacle);
+      } else if (obstacle.kind === "beam") {
+        drawBeam(obstacle);
       }
     }
   }
@@ -833,7 +857,6 @@ function startGame() {
     }
     drawCenteredText(isTouchDevice ? "TAP: JUMP   TAP AGAIN: DOUBLE" : "SPACE: JUMP   AGAIN: DOUBLE", 58, { color: COLORS.dim });
     drawCenteredText(isTouchDevice ? "SWIPE DOWN: DUCK   II: PAUSE" : "DOWN: DUCK   ESC: PAUSE", 66, { color: COLORS.dim });
-    drawCenteredText("SWIPE FROM LEFT EDGE: EXIT", 74, { color: COLORS.faint });
     drawCenteredText(`BEST ${records.best}   RUNS ${records.runs}`, 96, { color: COLORS.dim });
   }
 

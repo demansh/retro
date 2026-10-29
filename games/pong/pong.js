@@ -486,7 +486,6 @@ function startGame() {
     },
     onMenu: togglePause,
     isMenuZone: menuButton.containsClient,
-    onEdgeSwipe: exitToMenu,
     onKey: handleKey,
   });
 
@@ -558,7 +557,6 @@ function startGame() {
       drawCenteredText(isTouchDevice ? "TAP TO START" : "PRESS SPACE TO START", 54, { color: COLORS.bright });
     }
     drawCenteredText(isTouchDevice ? "DRAG: MOVE   II: PAUSE" : "W/S: MOVE   ESC: PAUSE", 68, { color: COLORS.dim });
-    drawCenteredText("SWIPE FROM LEFT EDGE: EXIT", 76, { color: COLORS.faint });
     drawCenteredText(`WINS ${records.wins}  STREAK ${records.bestStreak}  RALLY ${records.longestRally}`, 94, { color: COLORS.dim });
   }
 

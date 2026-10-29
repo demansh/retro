@@ -7,8 +7,10 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 - GitHub Pages runs Jekyll 3.x: no custom plugins, no Jekyll 4-only features.
 - All URLs in templates go through `| relative_url` (`baseurl` is `/retro`). JS imports are relative paths.
 - Controls are gestures. The only on-screen control is the `II` menu icon in the top-right corner (drawn in the
-  buffer by `engine/menubutton.js`); a tap on it toggles pause. Swipe from the left edge = exit to menu.
-  All other gestures (drag, tap, long press, swipes) belong to the game. Keyboard is a desktop extra (Esc = pause).
+  buffer by `engine/menubutton.js`); a tap on it toggles pause. Exit to the site menu
+  only via `EXIT` in the pause menu. Never add edge swipes (from any screen edge) as a system gesture: they clash
+  with OS back/notification gestures. All other gestures (drag, tap, long press, swipes) belong to the game.
+  Keyboard is a desktop extra (Esc = pause).
 - Landscape only. Portrait on touch devices shows the `ROTATE DEVICE` notice (handled by `_layouts/game.html` CSS).
 - UI text is English uppercase (VT323 and the pixel font have no Cyrillic).
 - Budget: a game page must stay under 100 KB gzip.
