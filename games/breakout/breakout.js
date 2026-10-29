@@ -25,7 +25,9 @@ const BRICK_STRIDE_Y = BRICK_HEIGHT + 1;
 const BRICKS_LEFT = FIELD_LEFT + Math.floor((FIELD_RIGHT - FIELD_LEFT - (BRICK_COLUMNS * BRICK_STRIDE_X - 1)) / 2);
 const BRICKS_TOP = 26;
 const MAX_BRICK_HP = 3;
-const PADDLE_Y = 178;
+const PADDLE_Y = 158;
+const TOUCH_ZONE_Y = 178;
+const TOUCH_ZONE_DASH = 3;
 const PADDLE_HEIGHT = 3;
 const PADDLE_WIDTH = 16;
 const WIDE_PADDLE_WIDTH = 24;
@@ -758,6 +760,14 @@ function startGame() {
     }
   }
 
+  function drawTouchZone() {
+    for (let x = FIELD_LEFT + 12; x < FIELD_RIGHT - 12; x += TOUCH_ZONE_DASH * 2) {
+      buffer.rect(x, TOUCH_ZONE_Y, TOUCH_ZONE_DASH, 1, COLORS.faint);
+    }
+    drawText(buffer.context, "<", FIELD_LEFT + 4, TOUCH_ZONE_Y - 2, { color: COLORS.faint });
+    drawText(buffer.context, ">", FIELD_RIGHT - 7, TOUCH_ZONE_Y - 2, { color: COLORS.faint });
+  }
+
   function drawField() {
     buffer.rect(0, WALL_Y, WIDTH, 1, COLORS.dim);
     buffer.rect(0, FIELD_TOP, FIELD_LEFT, HEIGHT - FIELD_TOP, COLORS.faint);
@@ -824,7 +834,7 @@ function startGame() {
     if (scene === "serve") {
       drawBannerText(game.round > 1 ? `ROUND ${game.round} LEVEL ${game.levelIndex + 1}` : `LEVEL ${game.levelIndex + 1}`, 110);
       if (isBlinkOn()) {
-        drawBannerText(isTouchDevice ? "TAP TO LAUNCH" : "SPACE TO LAUNCH", 150);
+        drawBannerText(isTouchDevice ? "TAP TO LAUNCH" : "SPACE TO LAUNCH", 136);
       }
     } else if (scene === "clear") {
       drawBannerText("LEVEL CLEAR", 104);
@@ -889,6 +899,9 @@ function startGame() {
       drawHud();
     }
     game.bricks.forEach((brick) => brick.isAlive && drawBrick(brick));
+    if (isTouchDevice && scene !== "title") {
+      drawTouchZone();
+    }
     drawPaddle();
     drawPlayObjects(scene);
     particles.draw(buffer.context);
