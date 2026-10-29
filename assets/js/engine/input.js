@@ -4,7 +4,7 @@ const LONG_PRESS_MS = 500;
 const EDGE_ZONE_PX = 48;
 const EDGE_SWIPE_DISTANCE = 80;
 
-export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = () => {}, onEdgeSwipe = () => {}, onKey = () => {}, onInteraction = () => {} } = {}) {
+export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = () => {}, onEdgeSwipe = () => {}, onKey = () => {}, onInteraction = () => {}, onMenu = () => {}, isMenuZone = () => false } = {}) {
   const pressedKeys = new Set();
   let gesture = null;
 
@@ -30,10 +30,14 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
       lastY: event.clientY,
       startTime: performance.now(),
       isFromEdge: event.clientX <= EDGE_ZONE_PX,
+      isMenu: isMenuZone(event.clientX, event.clientY),
       hasMoved: false,
       isConsumed: false,
       longPressTimer: 0,
     };
+    if (gesture.isMenu) {
+      return;
+    }
     gesture.longPressTimer = window.setTimeout(() => {
       if (gesture && !gesture.hasMoved) {
         gesture.isConsumed = true;
@@ -58,6 +62,9 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
       gesture.hasMoved = true;
       cancelLongPress();
     }
+    if (gesture.isMenu) {
+      return;
+    }
     if (gesture.isFromEdge && !gesture.isConsumed && totalX > EDGE_SWIPE_DISTANCE && totalX > Math.abs(totalY) * 2) {
       gesture.isConsumed = true;
       onEdgeSwipe();
@@ -75,7 +82,11 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
     }
     cancelLongPress();
     const duration = performance.now() - gesture.startTime;
-    if (!gesture.isConsumed && !gesture.hasMoved && duration <= TAP_MAX_MS) {
+    if (gesture.isMenu) {
+      if (!gesture.hasMoved) {
+        onMenu();
+      }
+    } else if (!gesture.isConsumed && !gesture.hasMoved && duration <= TAP_MAX_MS) {
       onTap(event.clientX, event.clientY);
     }
     gesture = null;

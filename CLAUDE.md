@@ -6,8 +6,9 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 - Vanilla JS ES modules only. No npm, no bundler, no external CDNs, no libraries.
 - GitHub Pages runs Jekyll 3.x: no custom plugins, no Jekyll 4-only features.
 - All URLs in templates go through `| relative_url` (`baseurl` is `/retro`). JS imports are relative paths.
-- Controls are gestures only, no on-screen buttons: drag = move, tap = action, long press = pause,
-  swipe from the left edge = exit to menu. Keyboard is a desktop extra.
+- Controls are gestures. The only on-screen control is the `II` menu icon in the top-right corner (drawn in the
+  buffer by `engine/menubutton.js`); a tap on it toggles pause. Swipe from the left edge = exit to menu.
+  All other gestures (drag, tap, long press, swipes) belong to the game. Keyboard is a desktop extra (Esc = pause).
 - Landscape only. Portrait on touch devices shows the `ROTATE DEVICE` notice (handled by `_layouts/game.html` CSS).
 - UI text is English uppercase (VT323 and the pixel font have no Cyrillic).
 - Budget: a game page must stay under 100 KB gzip.
@@ -25,7 +26,9 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 - `screen` buffer + display fit (`clientToBuffer`, `cssToBufferScale` for mapping gestures).
 - `crt` renderer with WebGL1 and Canvas 2D fallback; `powerOn()` / `powerOff()` return promises.
 - `glitch` effect scheduler: `trigger("tear" | "hit" | "goal")`, pass `uniforms()` to `crt.render`.
-- `input` gesture recognizer; call `audio.unlock()` from `onInteraction` (needed on iOS).
+- `input` gesture recognizer; call `audio.unlock()` from `onInteraction` (needed on iOS). Pass
+  `isMenuZone: menuButton.containsClient` and `onMenu`: touches that start in the zone never reach game handlers.
+- `menubutton` `createMenuButton(display, WIDTH)`: `draw(buffer, color)` each frame, `left` to lay out the HUD.
 - `collision` (`overlaps`, `sweptAabb` — use swept for fast objects), `particles` (pooled pixel bursts),
   `audio` (synthesized square/noise SFX, no audio files, `setMuted`), `storage` (`createStore(id, version, defaults)`).
 - `settings` global user settings (`sound`, `color`) in `retro:settings:v1`: `createSettings()` with `onChange`,
@@ -38,6 +41,7 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 2. `games/<id>/<id>.js` — use `games/pong/pong.js` as the reference for wiring: buffer → crt → display → glitch,
    input handlers, state machine (title / play / paused / over), pause menu, exit via `crt.powerOff()` then
    navigate to `document.body.dataset.home`, records via `createStore("<id>", 1, defaults)` with sanitizing.
+   Pause is opened by the menu icon (`onMenu`) and Esc/P, never by a game gesture.
    Pause menu must include `SETTINGS` (sub-view from `settings.menuItems()` + `BACK`), and wire
    `settings.onChange(({ sound }) => { audio.setMuted(!sound); crt.setPalette(readPalette()); })`.
 3. Add an entry to `_data/games.yml` (`id`, `title`, `tagline`, `url`). The menu renders from it.

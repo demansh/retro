@@ -3,6 +3,7 @@ import { createBuffer, createDisplay } from "../../assets/js/engine/screen.js";
 import { createCrt } from "../../assets/js/engine/crt.js";
 import { createGlitch } from "../../assets/js/engine/glitch.js";
 import { createInput } from "../../assets/js/engine/input.js";
+import { createMenuButton } from "../../assets/js/engine/menubutton.js";
 import { overlaps, sweptAabb } from "../../assets/js/engine/collision.js";
 import { createParticles } from "../../assets/js/engine/particles.js";
 import { createAudio } from "../../assets/js/engine/audio.js";
@@ -99,6 +100,7 @@ function startGame() {
   const buffer = createBuffer(WIDTH, HEIGHT);
   const crt = createCrt(document.getElementById("screen"), buffer, { reducedMotion: prefersReducedMotion });
   const display = createDisplay(crt.canvas, WIDTH, HEIGHT);
+  const menuButton = createMenuButton(display, WIDTH);
   const glitch = createGlitch({ width: WIDTH, height: HEIGHT, reducedMotion: prefersReducedMotion });
   const particles = createParticles(320);
   const audio = createAudio();
@@ -482,7 +484,8 @@ function startGame() {
       requestImmersive();
       handleAction(display.clientToBuffer(clientX, clientY));
     },
-    onLongPress: togglePause,
+    onMenu: togglePause,
+    isMenuZone: menuButton.containsClient,
     onEdgeSwipe: exitToMenu,
     onKey: handleKey,
   });
@@ -554,7 +557,7 @@ function startGame() {
     if (isBlinkOn()) {
       drawCenteredText(isTouchDevice ? "TAP TO START" : "PRESS SPACE TO START", 54, { color: COLORS.bright });
     }
-    drawCenteredText(isTouchDevice ? "DRAG: MOVE   HOLD: PAUSE" : "W/S: MOVE   ESC: PAUSE", 68, { color: COLORS.dim });
+    drawCenteredText(isTouchDevice ? "DRAG: MOVE   II: PAUSE" : "W/S: MOVE   ESC: PAUSE", 68, { color: COLORS.dim });
     drawCenteredText("SWIPE FROM LEFT EDGE: EXIT", 76, { color: COLORS.faint });
     drawCenteredText(`WINS ${records.wins}  STREAK ${records.bestStreak}  RALLY ${records.longestRally}`, 94, { color: COLORS.dim });
   }
@@ -595,6 +598,14 @@ function startGame() {
     }
   }
 
+  function drawMenuButton() {
+    if (game.state === "paused") {
+      menuButton.draw(buffer, COLORS.bright);
+    } else if (CONTROLLABLE_STATES.has(game.state)) {
+      menuButton.draw(buffer, COLORS.dim);
+    }
+  }
+
   function monitorPerformance(frameSeconds) {
     if (performanceSample.isDone || !crt.isAccelerated) {
       return;
@@ -631,6 +642,7 @@ function startGame() {
     } else {
       drawServeHint();
     }
+    drawMenuButton();
     crt.render(glitch.uniforms(), frameSeconds);
     monitorPerformance(frameSeconds);
   }

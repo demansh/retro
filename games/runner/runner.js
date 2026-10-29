@@ -3,6 +3,7 @@ import { createBuffer, createDisplay } from "../../assets/js/engine/screen.js";
 import { createCrt } from "../../assets/js/engine/crt.js";
 import { createGlitch } from "../../assets/js/engine/glitch.js";
 import { createInput } from "../../assets/js/engine/input.js";
+import { createMenuButton } from "../../assets/js/engine/menubutton.js";
 import { overlaps } from "../../assets/js/engine/collision.js";
 import { createParticles } from "../../assets/js/engine/particles.js";
 import { createAudio } from "../../assets/js/engine/audio.js";
@@ -146,6 +147,7 @@ function startGame() {
   const buffer = createBuffer(WIDTH, HEIGHT);
   const crt = createCrt(document.getElementById("screen"), buffer, { reducedMotion: prefersReducedMotion });
   const display = createDisplay(crt.canvas, WIDTH, HEIGHT);
+  const menuButton = createMenuButton(display, WIDTH);
   const glitch = createGlitch({ width: WIDTH, height: HEIGHT, reducedMotion: prefersReducedMotion });
   const particles = createParticles(256);
   const audio = createAudio();
@@ -662,7 +664,8 @@ function startGame() {
       requestImmersive();
       handleAction(display.clientToBuffer(clientX, clientY));
     },
-    onLongPress: togglePause,
+    onMenu: togglePause,
+    isMenuZone: menuButton.containsClient,
     onEdgeSwipe: exitToMenu,
     onKey: handleKey,
   });
@@ -815,7 +818,7 @@ function startGame() {
 
   function drawHud() {
     const text = records.best > 0 ? `HI ${padScore(records.best)}  ${padScore(currentScore())}` : padScore(currentScore());
-    drawText(buffer.context, text, WIDTH - 4, 4, { color: COLORS.score, align: "right" });
+    drawText(buffer.context, text, menuButton.left - 6, 3, { color: COLORS.score, align: "right" });
   }
 
   function drawVeil() {
@@ -829,7 +832,7 @@ function startGame() {
       drawCenteredText(isTouchDevice ? "TAP TO START" : "PRESS SPACE TO START", 44, { color: COLORS.bright });
     }
     drawCenteredText(isTouchDevice ? "TAP: JUMP   TAP AGAIN: DOUBLE" : "SPACE: JUMP   AGAIN: DOUBLE", 58, { color: COLORS.dim });
-    drawCenteredText(isTouchDevice ? "SWIPE DOWN: DUCK   HOLD: PAUSE" : "DOWN: DUCK   ESC: PAUSE", 66, { color: COLORS.dim });
+    drawCenteredText(isTouchDevice ? "SWIPE DOWN: DUCK   II: PAUSE" : "DOWN: DUCK   ESC: PAUSE", 66, { color: COLORS.dim });
     drawCenteredText("SWIPE FROM LEFT EDGE: EXIT", 74, { color: COLORS.faint });
     drawCenteredText(`BEST ${records.best}   RUNS ${records.runs}`, 96, { color: COLORS.dim });
   }
@@ -858,6 +861,14 @@ function startGame() {
     drawCenteredText(`BEST ${records.best}   RUNS ${records.runs}`, 66, { color: COLORS.dim });
     if (game.stateTime >= GAME_OVER_INPUT_DELAY_SECONDS && isBlinkOn()) {
       drawCenteredText(isTouchDevice ? "TAP TO RUN AGAIN" : "SPACE TO RUN AGAIN", 88, { color: COLORS.bright });
+    }
+  }
+
+  function drawMenuButton() {
+    if (game.state === "paused") {
+      menuButton.draw(buffer, COLORS.bright);
+    } else if (CONTROLLABLE_STATES.has(game.state)) {
+      menuButton.draw(buffer, COLORS.dim);
     }
   }
 
@@ -894,6 +905,7 @@ function startGame() {
     } else if (scene === "over") {
       drawGameOver();
     }
+    drawMenuButton();
     crt.render(glitch.uniforms(), frameSeconds);
     monitorPerformance(frameSeconds);
   }
