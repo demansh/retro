@@ -6,3 +6,7 @@
   title: RUNNER
   tagline: JUMP THE OBSTACLES
   url: /games/runner/
+- id: breakout
+  title: BREAKOUT
+  tagline: SMASH ALL BRICKS
+  url: /games/breakout/

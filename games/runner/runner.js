@@ -36,8 +36,11 @@ const PIT_RESCUE_DEPTH = 3;
 const SWIPE_THRESHOLD = 6;
 const TITLE_SPEED = 40;
 const START_SPEED = 82;
-const MAX_SPEED = 210;
+const CRUISE_SPEED = 210;
 const ACCELERATION = 3.3;
+const LATE_ACCELERATION = 1.1;
+const CRUISE_TIME_SECONDS = (CRUISE_SPEED - START_SPEED) / ACCELERATION;
+const MAX_STEP_DISTANCE = 2;
 const FLYER_EXTRA_SPEED = 22;
 const FLYER_CLEARANCE = 8;
 const FLYER_WIDTH = 7;
@@ -482,9 +485,24 @@ function startGame() {
     }
   }
 
+  function speedAt(runTime) {
+    if (runTime <= CRUISE_TIME_SECONDS) {
+      return START_SPEED + ACCELERATION * runTime;
+    }
+    return CRUISE_SPEED + LATE_ACCELERATION * (runTime - CRUISE_TIME_SECONDS);
+  }
+
   function updatePlay(deltaSeconds) {
+    const stepCount = Math.max(1, Math.ceil((speedAt(game.runTime + deltaSeconds) * deltaSeconds) / MAX_STEP_DISTANCE));
+    const stepSeconds = deltaSeconds / stepCount;
+    for (let step = 0; step < stepCount && game.state === "play"; step++) {
+      advancePlay(stepSeconds);
+    }
+  }
+
+  function advancePlay(deltaSeconds) {
     game.runTime += deltaSeconds;
-    game.speed = Math.min(MAX_SPEED, START_SPEED + ACCELERATION * game.runTime);
+    game.speed = speedAt(game.runTime);
     game.distance += game.speed * deltaSeconds;
     updateObstacles(deltaSeconds);
     updatePlayer(deltaSeconds);

@@ -386,8 +386,29 @@ button.menu__item {
   }
 }
 
+.rotate-notice--portrait .rotate-notice__icon {
+  animation-name: rotate-hint-portrait;
+}
+
+@keyframes rotate-hint-portrait {
+  0%,
+  40% {
+    transform: rotate(-90deg);
+  }
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
 @media (orientation: portrait) and (pointer: coarse) {
-  .rotate-notice {
+  .rotate-notice:not(.rotate-notice--portrait) {
+    display: flex;
+  }
+}
+
+@media (orientation: landscape) and (pointer: coarse) {
+  .rotate-notice--portrait {
     display: flex;
   }
 }
@@ -406,7 +427,8 @@ button.menu__item {
   .crt,
   .crt::after,
   .terminal__screen,
-  .rotate-notice__icon {
+  .rotate-notice__icon,
+  .rotate-notice--portrait .rotate-notice__icon {
     animation: none;
   }
 

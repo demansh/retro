@@ -11,12 +11,15 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
   only via `EXIT` in the pause menu. Never add edge swipes (from any screen edge) as a system gesture: they clash
   with OS back/notification gestures. All other gestures (drag, tap, long press, swipes) belong to the game.
   Keyboard is a desktop extra (Esc = pause).
-- Landscape only. Portrait on touch devices shows the `ROTATE DEVICE` notice (handled by `_layouts/game.html` CSS).
+- Landscape by default: portrait on touch devices shows the `ROTATE DEVICE` notice (`_layouts/game.html` CSS).
+  A game can opt into portrait with `orientation: portrait` in front matter (see `games/breakout`): the notice
+  then shows in landscape, the game pauses on `(orientation: landscape) and (pointer: coarse)` and locks `portrait`.
 - UI text is English uppercase (VT323 and the pixel font have no Cyrillic).
 - Budget: a game page must stay under 100 KB gzip.
 
 ## Rendering model (important)
-- Games draw into a low-res buffer (`createBuffer(192, 108)`) using rectangles and integer coordinates.
+- Games draw into a low-res buffer (`createBuffer(192, 108)`, portrait games `createBuffer(108, 192)`) using
+  rectangles and integer coordinates.
 - Draw in **grayscale only** (`#fff`, `#808080`, ...). The CRT shader (`crt.js`) converts luminance to green
   phosphor and adds curvature, scanlines, bloom, persistence trails, noise. Never draw in green yourself.
 - Clear the buffer to black every frame; trails come from shader persistence, not from partial clears.
