@@ -39,6 +39,7 @@ const CAR_LENGTH = 300;
 const LANE_CHANGE_RATE = 0.7;
 const NEAR_MISS_GAP = 0.2;
 const NEAR_MISS_SECONDS = 1;
+const CRASH_KNOCK = 0.3;
 const TIME_DELTA_SECONDS = 1.2;
 const START_SECONDS = 40;
 const CHECKPOINT_BONUS = 32;
@@ -449,6 +450,11 @@ function startGame() {
     particles.emit(x, playerScreenY() - 8, { count, angle: -Math.PI / 2, spread: Math.PI * 1.4, speed: [30, 110], lifetime: [0.3, 0.9], sizes: [1, 2, 2], fall: 140 });
   }
 
+  function knockAwayFrom(obstacleX) {
+    const side = player.x >= obstacleX ? 1 : -1;
+    player.x = clamp(player.x + side * CRASH_KNOCK, -MAX_PLAYER_X, MAX_PLAYER_X);
+  }
+
   function stopCar(text) {
     player.speed = 0;
     player.steer = 0;
@@ -466,6 +472,7 @@ function startGame() {
       return;
     }
     emitCrash(WIDTH / 2 + (car.x - player.x) * 96, 36);
+    knockAwayFrom(car.x);
     stopCar("CRASH");
   }
 
@@ -505,6 +512,7 @@ function startGame() {
   function hitBarrier(barrier) {
     barrier.isHit = true;
     emitCrash(WIDTH / 2 + (barrier.x - player.x) * 96, 40);
+    knockAwayFrom(barrier.x);
     stopCar("CRASH");
   }
 
