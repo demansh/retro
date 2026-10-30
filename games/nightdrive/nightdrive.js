@@ -25,12 +25,9 @@ const FOG_DENSITY = 0.06;
 const HAZE_LUM = 26;
 const CURVE_VISUAL = 0.6;
 const MAX_SPEED = SEGMENT_LENGTH * 60;
-const NITRO_SPEED = MAX_SPEED * 1.35;
 const CRUISE_SPEED = MAX_SPEED * 0.3;
 const ACCELERATION = MAX_SPEED / 4.5;
-const NITRO_ACCELERATION = MAX_SPEED * 0.9;
 const RELEASE_DECELERATION = MAX_SPEED / 2.5;
-const OVERSPEED_DECELERATION = MAX_SPEED / 2;
 const OFFROAD_LIMIT = MAX_SPEED * 0.35;
 const OFFROAD_DECELERATION = MAX_SPEED * 0.9;
 const STEER_RATE = 2.4;
@@ -42,9 +39,11 @@ const CAR_LENGTH = 300;
 const LANE_CHANGE_RATE = 0.7;
 const NEAR_MISS_GAP = 0.2;
 const NEAR_MISS_SECONDS = 1;
-const NEAR_MISS_NITRO = 0.34;
-const NITRO_SECONDS = 2.2;
-const MAX_NITRO = 3;
+const CRASH_PENALTY_SECONDS = 2;
+const HEAD_ON_PENALTY_SECONDS = 5;
+const BARRIER_PENALTY_SECONDS = 3;
+const CRASH_KNOCK = 0.3;
+const TIME_DELTA_SECONDS = 1.2;
 const INVULNERABLE_SECONDS = 1.2;
 const START_SECONDS = 40;
 const CHECKPOINT_BONUS = 32;
@@ -54,8 +53,6 @@ const TIME_WARNING_SECONDS = 5;
 const COUNTDOWN_SECONDS = 3;
 const KMH_PER_SPEED = 220 / MAX_SPEED;
 const STEER_RANGE = 22;
-const SWIPE_DISTANCE = 16;
-const SWIPE_WINDOW_MS = 200;
 const ANNOUNCE_LEAD = 110;
 const TRAFFIC_SPAWN_INTERVAL = 0.3;
 const ONCOMING_LIMIT = 4;
@@ -80,7 +77,8 @@ const CONTROLLABLE_STATES = new Set(["title", "countdown", "play", "timeup"]);
 const DRIVING_STATES = new Set(["countdown", "play", "timeup"]);
 const ANNOUNCEMENTS = { twoway: "ONCOMING TRAFFIC", tunnel: "TUNNEL AHEAD", fog: "FOG AHEAD", roadworks: "ROADWORKS AHEAD" };
 const CAR_TYPES = { car: { width: 0.27, height: 0.13 }, truck: { width: 0.33, height: 0.3 } };
-const MOON_ROWS = [3, 5, 7, 7, 7, 5, 3];
+const OUTLINE_MIN_WIDTH = 5;
+const MOON_ROWS =[3, 5, 7, 7, 7, 5, 3];
 const GRAYS = Array.from({ length: 256 }, (_, value) => `rgb(${value},${value},${value})`);
 const COLORS = {
   bright: "#ffffff",
@@ -128,11 +126,6 @@ function createSounds(audio) {
       audio.noise({ duration: 0.18, volume: 0.1, highpass: 2500 });
       audio.tone({ frequency: 990, slideTo: 1480, duration: 0.1, volume: 0.07 });
     },
-    nitro: () => {
-      audio.noise({ duration: 0.6, volume: 0.14, highpass: 900 });
-      audio.tone({ frequency: 220, slideTo: 880, duration: 0.5, volume: 0.08 });
-    },
-    empty: () => audio.tone({ frequency: 150, duration: 0.08, volume: 0.08 }),
     checkpoint: () => [659, 784, 988, 1319].forEach((frequency, index) => audio.tone({ frequency, duration: 0.1, delay: index * 0.08, volume: 0.1 })),
     warning: () => audio.tone({ frequency: 1200, duration: 0.06, volume: 0.08 }),
     announce: () => [880, 660].forEach((frequency, index) => audio.tone({ frequency, duration: 0.08, delay: index * 0.1, volume: 0.07 })),
@@ -163,7 +156,7 @@ function createSky() {
 }
 
 function createPlayer() {
-  return { x: 0, speed: 0, steer: 0, nitroTime: 0, nitroCharges: 1, invulnerable: 0, isOffroad: false, isBraking: false, bounce: 0 };
+  return { x: 0, speed: 0, steer: 0, invulnerable: 0, isOffroad: false, isBraking: false, bounce: 0 };
 }
 
 function createRace() {
@@ -185,6 +178,7 @@ function createRace() {
     isRecord: false,
     distance: 0,
     message: { text: "", timer: 0, scale: 1 },
+    timeDelta: { text: "", timer: 0 },
   };
 }
 
@@ -211,7 +205,7 @@ function startGame() {
   const cars = [];
   const carBuckets = Array.from({ length: DRAW_DISTANCE }, () => []);
   const screenPoint = { x: 0, y: 0, unit: 0 };
-  const controls = { isHolding: false, offsetX: 0, swipeSamples: [] };
+  const controls = { isHolding: false, offsetX: 0 };
   let track = createTrack();
   let race = createRace();
   let drawDistance = DRAW_DISTANCE;
@@ -243,6 +237,12 @@ function startGame() {
     race.message.scale = scale;
   }
 
+  function changeTime(seconds) {
+    race.timeLeft = Math.max(0, race.timeLeft + seconds);
+    race.timeDelta.text = seconds > 0 ? `+${seconds}` : `-${-seconds}`;
+    race.timeDelta.timer = TIME_DELTA_SECONDS;
+  }
+
   function playerZ() {
     return race.position + PLAYER_Z;
   }
@@ -256,7 +256,6 @@ function startGame() {
     race = createRace();
     Object.assign(player, createPlayer());
     cars.length = 0;
-    controls.swipeSamples.length = 0;
     particles.clear();
     track.ensure(DRAW_DISTANCE * 2);
     for (let segmentsAhead = 30; segmentsAhead < DRAW_DISTANCE; segmentsAhead += 25) {
@@ -290,41 +289,18 @@ function startGame() {
     return controls.isHolding ? controls.offsetX / STEER_RANGE : 0;
   }
 
-  function triggerNitro() {
-    if (game.state !== "play" || player.nitroTime > 0) {
-      return;
-    }
-    if (player.nitroCharges < 1) {
-      sounds.empty();
-      setMessage("NO NITRO", 0.8);
-      return;
-    }
-    player.nitroCharges -= 1;
-    player.nitroTime = NITRO_SECONDS;
-    glitch.trigger("hit");
-    sounds.nitro();
-    setMessage("NITRO", 0.8, 2);
-  }
-
   function applyThrottle(deltaSeconds, canAccelerate) {
     const isGas = canAccelerate && isGasPressed();
-    const previousSpeed = player.speed;
-    const topSpeed = player.nitroTime > 0 ? NITRO_SPEED : MAX_SPEED;
-    if (player.nitroTime > 0) {
-      player.speed += NITRO_ACCELERATION * deltaSeconds;
-    } else if (isGas) {
+    if (isGas) {
       player.speed += ACCELERATION * deltaSeconds;
     } else {
       player.speed -= RELEASE_DECELERATION * deltaSeconds;
     }
-    if (player.speed > topSpeed) {
-      player.speed = previousSpeed > topSpeed ? Math.max(topSpeed, previousSpeed - OVERSPEED_DECELERATION * deltaSeconds) : topSpeed;
-    }
     if (player.isOffroad && player.speed > OFFROAD_LIMIT) {
       player.speed = Math.max(OFFROAD_LIMIT, player.speed - OFFROAD_DECELERATION * deltaSeconds);
     }
-    player.speed = Math.max(0, player.speed);
-    player.isBraking = !isGas && player.nitroTime <= 0;
+    player.speed = clamp(player.speed, 0, MAX_SPEED);
+    player.isBraking = !isGas;
   }
 
   function updatePlayer(deltaSeconds, canAccelerate) {
@@ -335,7 +311,6 @@ function startGame() {
     player.x -= CENTRIFUGAL * speedRatio * speedRatio * segment.curve * deltaSeconds;
     player.x = clamp(player.x, -MAX_PLAYER_X, MAX_PLAYER_X);
     player.isOffroad = Math.abs(player.x) > 1;
-    player.nitroTime = Math.max(0, player.nitroTime - deltaSeconds);
     player.invulnerable = Math.max(0, player.invulnerable - deltaSeconds);
     applyThrottle(deltaSeconds, canAccelerate);
     player.bounce = player.isOffroad && player.speed > 0 && Math.random() < 0.5 ? 1 : 0;
@@ -345,9 +320,6 @@ function startGame() {
 
   function emitDrivingParticles() {
     const baseY = playerScreenY();
-    if (player.nitroTime > 0) {
-      particles.emit(WIDTH / 2 + pickRandom([-8, 7]), baseY - 1, { count: 2, angle: Math.PI / 2, spread: 0.8, speed: [20, 50], lifetime: [0.08, 0.2], sizes: [1, 2] });
-    }
     if (player.isOffroad && player.speed > 0 && Math.random() < 0.6) {
       particles.emit(WIDTH / 2 + pickRandom([-12, 11]), baseY - 1, { count: 1, angle: -Math.PI / 2, spread: 1.6, speed: [15, 40], lifetime: [0.15, 0.35], sizes: [1], fall: 120 });
     }
@@ -483,29 +455,38 @@ function startGame() {
     particles.emit(x, playerScreenY() - 8, { count, angle: -Math.PI / 2, spread: Math.PI * 1.4, speed: [30, 110], lifetime: [0.3, 0.9], sizes: [1, 2, 2], fall: 140 });
   }
 
-  function crash(car) {
-    car.wasHit = true;
+  function knockAwayFrom(obstacleX) {
+    const side = player.x >= obstacleX ? 1 : -1;
+    player.x = clamp(player.x + side * CRASH_KNOCK, -MAX_PLAYER_X, MAX_PLAYER_X);
+    player.steer = 0;
+  }
+
+  function penalize(text, seconds) {
     player.invulnerable = INVULNERABLE_SECONDS;
     glitch.trigger("goal");
     sounds.crash();
+    changeTime(-seconds);
+    setMessage(`${text} -${seconds} SEC`, 1.4, 2);
+  }
+
+  function crash(car) {
+    car.wasHit = true;
     if (car.direction < 0) {
       player.speed = MAX_SPEED * 0.05;
       car.isGone = true;
       emitCrash(WIDTH / 2, 60);
-      setMessage("HEAD-ON!", 1.2, 2);
+      penalize("HEAD-ON", HEAD_ON_PENALTY_SECONDS);
       return;
     }
     player.speed = Math.min(player.speed, car.speed) * 0.6;
-    car.z = Math.max(car.z, playerZ() + CAR_LENGTH);
-    player.x = clamp(player.x + (player.x >= car.x ? 0.12 : -0.12), -MAX_PLAYER_X, MAX_PLAYER_X);
     emitCrash(WIDTH / 2 + (car.x - player.x) * 96, 36);
-    setMessage("CRASH", 1, 2);
+    knockAwayFrom(car.x);
+    penalize("CRASH", CRASH_PENALTY_SECONDS);
   }
 
   function nearMiss() {
     race.nearMisses += 1;
-    race.timeLeft += NEAR_MISS_SECONDS;
-    player.nitroCharges = Math.min(MAX_NITRO, player.nitroCharges + NEAR_MISS_NITRO);
+    changeTime(NEAR_MISS_SECONDS);
     sounds.nearMiss();
     setMessage(`CLOSE! +${NEAR_MISS_SECONDS}`, 0.9);
   }
@@ -539,11 +520,9 @@ function startGame() {
   function hitBarrier(barrier) {
     barrier.isHit = true;
     player.speed *= 0.35;
-    player.invulnerable = INVULNERABLE_SECONDS;
-    glitch.trigger("goal");
-    sounds.crash();
     emitCrash(WIDTH / 2 + (barrier.x - player.x) * 96, 40);
-    setMessage("CRASH", 1, 2);
+    knockAwayFrom(barrier.x);
+    penalize("BARRIER", BARRIER_PENALTY_SECONDS);
   }
 
   function checkObstacles(segment) {
@@ -563,7 +542,7 @@ function startGame() {
   function reachCheckpoint() {
     race.stage += 1;
     const bonus = Math.max(CHECKPOINT_BONUS_MIN, CHECKPOINT_BONUS - (race.stage - 1) * CHECKPOINT_BONUS_DECAY);
-    race.timeLeft += bonus;
+    changeTime(bonus);
     glitch.trigger("hit");
     sounds.checkpoint();
     setMessage(`CHECKPOINT +${bonus}`, 2, 1);
@@ -638,6 +617,7 @@ function startGame() {
     race.isInTunnel = isInTunnel;
     drawDistance = Math.round(lerp(DRAW_DISTANCE, FOG_DRAW_DISTANCE, race.fogLevel));
     race.message.timer = Math.max(0, race.message.timer - deltaSeconds);
+    race.timeDelta.timer = Math.max(0, race.timeDelta.timer - deltaSeconds);
   }
 
   function updateSounds(deltaSeconds) {
@@ -788,11 +768,7 @@ function startGame() {
   }
 
   function handleKey(code) {
-    if (code === "Space" && game.state === "play") {
-      triggerNitro();
-    } else if (code === "ShiftLeft" || code === "ShiftRight") {
-      triggerNitro();
-    } else if (code === "Space" || code === "Enter") {
+    if (code === "Space" || code === "Enter") {
       handleAction(null);
     } else if (code === "Escape" && game.state === "paused" && game.pauseView === "settings") {
       sounds.select();
@@ -822,25 +798,9 @@ function startGame() {
     root.requestFullscreen({ navigationUI: "hide" }).catch((error) => console.info("Fullscreen is unavailable", error));
   }
 
-  function detectSwipe(deltaX, deltaY) {
-    const now = performance.now();
-    const samples = controls.swipeSamples;
-    samples.push({ time: now, deltaX, deltaY });
-    while (samples.length > 0 && now - samples[0].time > SWIPE_WINDOW_MS) {
-      samples.shift();
-    }
-    const totalX = samples.reduce((sum, sample) => sum + sample.deltaX, 0);
-    const totalY = samples.reduce((sum, sample) => sum + sample.deltaY, 0);
-    if (totalY < -SWIPE_DISTANCE && Math.abs(totalY) > Math.abs(totalX) * 1.5) {
-      samples.length = 0;
-      triggerNitro();
-    }
-  }
-
   function releaseControls() {
     controls.isHolding = false;
     controls.offsetX = 0;
-    controls.swipeSamples.length = 0;
   }
 
   const input = createInput(document.querySelector(".game-stage"), {
@@ -848,13 +808,10 @@ function startGame() {
     onPress: () => {
       controls.isHolding = true;
       controls.offsetX = 0;
-      controls.swipeSamples.length = 0;
     },
     onRelease: releaseControls,
-    onDrag: (deltaX, deltaY) => {
-      const scale = display.gestureScale();
-      controls.offsetX = clamp(controls.offsetX + deltaX * scale, -STEER_RANGE, STEER_RANGE);
-      detectSwipe(deltaX * scale, deltaY * scale);
+    onDrag: (deltaX) => {
+      controls.offsetX = clamp(controls.offsetX + deltaX * display.gestureScale(), -STEER_RANGE, STEER_RANGE);
     },
     onTap: (clientX, clientY) => {
       requestImmersive();
@@ -879,6 +836,14 @@ function startGame() {
       return;
     }
     buffer.rect(x, y, width, bottom - y, gray(lum));
+  }
+
+  function outlineRect(x, y, width, height, clip) {
+    const bottom = Math.min(y + height + 1, clip);
+    if (width < OUTLINE_MIN_WIDTH || bottom <= y - 1) {
+      return;
+    }
+    buffer.rect(x - 1, y - 1, width + 2, bottom - y + 1, "#000");
   }
 
   function drawSky() {
@@ -1157,21 +1122,27 @@ function startGame() {
     const type = CAR_TYPES[car.type];
     const width = Math.max(2, type.width * unit);
     const height = Math.max(1, type.height * unit);
-    const body = fogged(18 + 70 * Math.exp(-depth / 10), depth);
+    const body = fogged(110 + 70 * Math.exp(-depth / 25), depth);
     const lightWidth = Math.max(1, width * 0.18);
     const lightHeight = Math.max(1, height * (car.type === "truck" ? 0.1 : 0.18));
     let lightY = y - height * 0.5;
     if (car.type === "truck") {
+      outlineRect(x - width / 2, y - height, width, height, clip);
       spriteRect(x - width / 2, y - height, width, height, body, clip);
+      spriteRect(x - width * 0.4, y - height * 0.85, width * 0.8, height * 0.5, body * 0.7, clip);
       const marker = Math.max(1, width * 0.06);
-      spriteRect(x - width / 2, y - height, marker, marker, fogged(170, depth), clip);
-      spriteRect(x + width / 2 - marker, y - height, marker, marker, fogged(170, depth), clip);
+      spriteRect(x - width / 2, y - height, marker, marker, fogged(255, depth), clip);
+      spriteRect(x + width / 2 - marker, y - height, marker, marker, fogged(255, depth), clip);
       lightY = y - height * 0.25;
     } else {
+      outlineRect(x - width / 2, y - height * 0.65, width, height * 0.65, clip);
+      outlineRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, clip);
       spriteRect(x - width / 2, y - height * 0.65, width, height * 0.65, body, clip);
-      spriteRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, body * 0.6, clip);
+      spriteRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, body * 0.75, clip);
+      spriteRect(x - width * 0.26, y - height * 0.9, width * 0.52, height * 0.2, fogged(25, depth), clip);
     }
-    const tail = fogged(car.speed < car.desiredSpeed ? 255 : 190, depth);
+    spriteRect(x - width / 2, lightY, width, lightHeight, fogged(30, depth), clip);
+    const tail = fogged(car.speed < car.desiredSpeed ? 255 : 200, depth);
     spriteRect(x - width / 2, lightY, lightWidth, lightHeight, tail, clip);
     spriteRect(x + width / 2 - lightWidth, lightY, lightWidth, lightHeight, tail, clip);
     if (car.pendingX !== null && isBlinkOn(6)) {
@@ -1184,10 +1155,14 @@ function startGame() {
     const { x, y, unit } = point;
     const width = Math.max(2, CAR_TYPES.car.width * unit);
     const height = Math.max(1, CAR_TYPES.car.height * unit);
-    spriteRect(x - width * 0.6, y, width * 1.2, Math.max(1, height * 0.8), fogged(28, depth), clip);
-    spriteRect(x - width * 0.65, y - height * 0.6, width * 1.3, height * 0.5, fogged(45, depth), clip);
-    spriteRect(x - width / 2, y - height * 0.65, width, height * 0.65, fogged(12 + 40 * Math.exp(-depth / 10), depth), clip);
-    spriteRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, fogged(10, depth), clip);
+    const body = fogged(90 + 60 * Math.exp(-depth / 25), depth);
+    spriteRect(x - width * 0.6, y, width * 1.2, Math.max(1, height * 0.8), fogged(40, depth), clip);
+    spriteRect(x - width * 0.65, y - height * 0.6, width * 1.3, height * 0.5, fogged(55, depth), clip);
+    outlineRect(x - width / 2, y - height * 0.65, width, height * 0.65, clip);
+    outlineRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, clip);
+    spriteRect(x - width / 2, y - height * 0.65, width, height * 0.65, body, clip);
+    spriteRect(x - width * 0.33, y - height, width * 0.66, height * 0.35, body * 0.75, clip);
+    spriteRect(x - width * 0.26, y - height * 0.9, width * 0.52, height * 0.2, fogged(25, depth), clip);
     const lightWidth = Math.max(1, width * 0.22);
     const lightHeight = Math.max(1, height * 0.2);
     spriteRect(x - width / 2 + width * 0.04, y - height * 0.45, lightWidth, lightHeight, fogged(255, depth * 0.5), clip);
@@ -1241,52 +1216,48 @@ function startGame() {
     const centerX = Math.round(WIDTH / 2);
     const baseY = playerScreenY();
     const lean = Math.round(player.steer);
-    buffer.rect(centerX - 13, baseY - 3, 4, 3, gray(14));
-    buffer.rect(centerX + 9, baseY - 3, 4, 3, gray(14));
-    buffer.rect(centerX - 12, baseY - 9, 24, 7, gray(75));
-    buffer.rect(centerX - 8 + lean, baseY - 13, 16, 4, gray(45));
-    buffer.rect(centerX - 7 + lean, baseY - 12, 14, 2, gray(18));
+    buffer.rect(centerX - 14, baseY - 4, 28, 5, "#000");
+    buffer.rect(centerX - 13, baseY - 10, 26, 9, "#000");
+    buffer.rect(centerX - 9 + lean, baseY - 14, 18, 6, "#000");
+    buffer.rect(centerX - 13, baseY - 3, 4, 3, gray(40));
+    buffer.rect(centerX + 9, baseY - 3, 4, 3, gray(40));
+    buffer.rect(centerX - 12, baseY - 9, 24, 7, gray(160));
+    buffer.rect(centerX - 8 + lean, baseY - 13, 16, 4, gray(120));
+    buffer.rect(centerX - 7 + lean, baseY - 12, 14, 2, gray(20));
+    buffer.rect(centerX - 12, baseY - 8, 24, 3, gray(30));
     const tail = gray(player.isBraking ? 255 : 170);
     const tailHeight = player.isBraking ? 3 : 2;
     buffer.rect(centerX - 12, baseY - 8, 5, tailHeight, tail);
     buffer.rect(centerX + 7, baseY - 8, 5, tailHeight, tail);
-    buffer.rect(centerX - 3, baseY - 5, 6, 2, gray(110));
-    if (player.nitroTime > 0 && isBlinkOn(15)) {
-      buffer.rect(centerX - 9, baseY - 2, 2, 2, gray(255));
-      buffer.rect(centerX + 7, baseY - 2, 2, 2, gray(255));
-    }
+    buffer.rect(centerX - 3, baseY - 4, 6, 2, gray(230));
   }
 
   function drawCenteredText(text, y, options) {
     drawText(buffer.context, text, WIDTH / 2, y, { align: "center", ...options });
   }
 
-  function drawNitroGauge() {
-    const cellWidth = 6;
-    const cellGap = 2;
-    const right = menuButton.left - 6;
-    const left = right - MAX_NITRO * (cellWidth + cellGap) + cellGap;
-    for (let cell = 0; cell < MAX_NITRO; cell++) {
-      const x = left + cell * (cellWidth + cellGap);
-      const fill = clamp(player.nitroCharges - cell, 0, 1);
-      buffer.rect(x, 4, cellWidth, 3, gray(40));
-      if (fill > 0) {
-        buffer.rect(x, 4, Math.max(1, Math.round(cellWidth * fill)), 3, fill >= 1 ? COLORS.bright : COLORS.dim);
-      }
+  function drawTimeDelta(x) {
+    const { text, timer } = race.timeDelta;
+    if (timer <= 0 || text === "") {
+      return;
     }
-    drawText(buffer.context, "NOS", left, 9, { color: player.nitroTime > 0 && isBlinkOn(8) ? COLORS.bright : COLORS.faint });
+    const isPenalty = text.startsWith("-");
+    if (!isPenalty || isBlinkOn(8)) {
+      drawText(buffer.context, text, x, 5, { scale: 2, color: isPenalty ? COLORS.bright : COLORS.dim });
+    }
   }
 
   function drawHud() {
     const seconds = Math.ceil(race.timeLeft);
+    const timerText = String(seconds);
     const isLow = seconds <= TIME_WARNING_SECONDS;
     if (!isLow || isBlinkOn(4)) {
-      drawText(buffer.context, String(seconds), 4, 3, { scale: 3, color: COLORS.bright });
+      drawText(buffer.context, timerText, 4, 3, { scale: 3, color: COLORS.bright });
     }
+    drawTimeDelta(8 + measureText(timerText, 3));
     const meters = Math.floor(race.position / SEGMENT_LENGTH);
     drawCenteredText(`${formatKilometers(meters)} KM`, 3, { color: COLORS.bright });
     drawCenteredText(`STAGE ${race.stage + 1}`, 10, { color: COLORS.faint });
-    drawNitroGauge();
     const speedText = String(Math.round(player.speed * KMH_PER_SPEED));
     drawText(buffer.context, speedText, 4, HEIGHT - 12, { scale: 2, color: COLORS.bright });
     drawText(buffer.context, "KMH", 6 + measureText(speedText, 2), HEIGHT - 8, { color: COLORS.dim });
@@ -1319,7 +1290,8 @@ function startGame() {
       drawCenteredText(isTouchDevice ? "TAP TO START" : "PRESS SPACE TO START", 50, { color: COLORS.bright });
     }
     drawCenteredText(isTouchDevice ? "HOLD: GAS   DRAG: STEER" : "UP: GAS   LEFT/RIGHT: STEER", 66, { color: COLORS.dim });
-    drawCenteredText(isTouchDevice ? "SWIPE UP: NITRO   II: PAUSE" : "SPACE: NITRO   ESC: PAUSE", 74, { color: COLORS.dim });
+    drawCenteredText(isTouchDevice ? "II: PAUSE" : "ESC: PAUSE", 74, { color: COLORS.dim });
+    drawCenteredText(`CLOSE PASS +${NEAR_MISS_SECONDS} SEC   CRASH -${CRASH_PENALTY_SECONDS} SEC`, 84, { color: COLORS.bright });
     drawCenteredText(`BEST ${formatKilometers(records.bestDistance)} KM   STAGE ${records.bestStage}`, 94, { color: COLORS.dim });
   }
 
