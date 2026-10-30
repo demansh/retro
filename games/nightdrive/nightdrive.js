@@ -51,7 +51,12 @@ const KMH_PER_SPEED = 220 / MAX_SPEED;
 const STEER_RANGE = 22;
 const ANNOUNCE_LEAD = 110;
 const TRAFFIC_SPAWN_INTERVAL = 0.3;
-const ONCOMING_LIMIT = 4;
+const ONCOMING_LIMIT = 2;
+const ONCOMING_SPAWN_CHANCE = 0.3;
+const TRAFFIC_BASE = 3;
+const TRAFFIC_PER_STAGE = 0.5;
+const TRAFFIC_MAX = 7;
+const START_TRAFFIC_GAP = 45;
 const ENGINE_INTERVAL = 0.07;
 const RUMBLE_INTERVAL = 0.08;
 const SKY_WIDTH = 512;
@@ -254,7 +259,7 @@ function startGame() {
     cars.length = 0;
     particles.clear();
     track.ensure(DRAW_DISTANCE * 2);
-    for (let segmentsAhead = 30; segmentsAhead < DRAW_DISTANCE; segmentsAhead += 25) {
+    for (let segmentsAhead = 30; segmentsAhead < DRAW_DISTANCE; segmentsAhead += START_TRAFFIC_GAP) {
       spawnCar(1, race.position + segmentsAhead * SEGMENT_LENGTH);
     }
     setState("countdown");
@@ -369,12 +374,12 @@ function startGame() {
     }
     race.spawnTimer = TRAFFIC_SPAWN_INTERVAL;
     const sameDirectionCount = cars.filter((car) => car.direction > 0).length;
-    if (sameDirectionCount < Math.min(5 + race.stage * 1.5, 14)) {
+    if (sameDirectionCount < Math.min(TRAFFIC_BASE + race.stage * TRAFFIC_PER_STAGE, TRAFFIC_MAX)) {
       spawnCar(1, race.position + randomBetween(0.85, 0.98) * DRAW_DISTANCE * SEGMENT_LENGTH);
     }
     const farZ = race.position + (DRAW_DISTANCE - 4) * SEGMENT_LENGTH;
     const oncomingCount = cars.length - sameDirectionCount;
-    if (oncomingCount < ONCOMING_LIMIT && track.segmentAt(farZ).isTwoWay && Math.random() < 0.45) {
+    if (oncomingCount < ONCOMING_LIMIT && track.segmentAt(farZ).isTwoWay && Math.random() < ONCOMING_SPAWN_CHANCE) {
       spawnCar(-1, farZ);
     }
   }
