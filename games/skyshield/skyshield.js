@@ -29,13 +29,20 @@ const TRAIL_SPACING = 1;
 const SPRINT_START_Y = 90;
 const SPRINT_SPEED_FACTOR = 2.4;
 const SPRINT_ACCELERATION = 40;
-const BASE_INTERCEPTOR_SPEED = 120;
-const BASE_BLAST_RADIUS = 10;
+const BOMBER_Y_RANGE = [26, 60];
+const BOMBER_DROP_SECONDS = [0.7, 1.3];
+const BOMBER_DROPS = 3;
+const BOMBER_DROP_MARGIN = 8;
+const BOMBER_EXIT_MARGIN = 6;
+const LAUNCHER_HIT_RADIUS = 6;
+const LAUNCHER_DOWN_SECONDS = 4;
+const BASE_INTERCEPTOR_SPEED = 85;
+const BASE_BLAST_RADIUS = 8;
 const BLAST_GROW_SECONDS = 0.18;
 const BLAST_HOLD_SECONDS = 0.25;
 const BLAST_SHRINK_SECONDS = 0.3;
-const BASE_SILO_CAPACITY = 3;
-const BASE_RELOAD_SECONDS = 1;
+const BASE_SILO_CAPACITY = 2;
+const BASE_RELOAD_SECONDS = 1.5;
 const CITY_MAX_HP = 12;
 const REPAIR_HP = 4;
 const REPAIR_HEALTH = 0.35;
@@ -73,11 +80,13 @@ const BACK_ITEM = { id: "back", label: "BACK" };
 const CONTROLLABLE_STATES = new Set(["title", "wave", "upgrade", "fall"]);
 const SIMULATED_STATES = new Set(["wave", "fall"]);
 const ENEMY_KINDS = {
-  warhead: { label: "WARHEAD", score: 25, damage: 2, speedFactor: 1, headSize: 2, unlockWave: 1, weight: 4 },
-  splitter: { label: "SPLITTER", score: 50, damage: 2, speedFactor: 0.9, headSize: 2, unlockWave: 3, weight: 1.5 },
-  dodger: { label: "DODGER", score: 50, damage: 2, speedFactor: 1, headSize: 2, unlockWave: 5, weight: 1.5 },
-  sprinter: { label: "SPRINTER", score: 75, damage: 2, speedFactor: 0.7, headSize: 2, unlockWave: 7, weight: 1.2 },
-  fragment: { label: "FRAGMENT", score: 15, damage: 1, speedFactor: 1.15, headSize: 1, unlockWave: Infinity, weight: 0 },
+  warhead: { label: "WARHEAD", score: 25, damage: 2, speedFactor: 1, width: 2, height: 2, unlockWave: 1, weight: 4 },
+  splitter: { label: "SPLITTER", score: 50, damage: 2, speedFactor: 0.9, width: 2, height: 2, unlockWave: 2, weight: 1.5 },
+  dodger: { label: "DODGER", score: 50, damage: 2, speedFactor: 1, width: 2, height: 2, unlockWave: 3, weight: 1.5 },
+  sprinter: { label: "SPRINTER", score: 75, damage: 2, speedFactor: 0.7, width: 2, height: 2, unlockWave: 4, weight: 1.2 },
+  bomber: { label: "BOMBER", score: 100, damage: 0, speedFactor: 0.9, width: 5, height: 2, unlockWave: 5, weight: 0.6 },
+  hunter: { label: "HUNTER", score: 75, damage: 0, speedFactor: 1.1, width: 2, height: 2, unlockWave: 6, weight: 1 },
+  fragment: { label: "FRAGMENT", score: 15, damage: 1, speedFactor: 1.15, width: 1, height: 1, unlockWave: Infinity, weight: 0 },
 };
 const UPGRADES = [
   { id: "blast", label: "BLAST +", detail: "BIGGER EXPLOSIONS", maxLevel: 4 },
@@ -201,9 +210,9 @@ function recordTrail(trail, x, y, maxPoints) {
 
 function waveParameters(wave) {
   return {
-    count: Math.min(28, 6 + wave * 2),
-    interval: Math.max(0.55, 2.2 - wave * 0.13),
-    speed: Math.min(34, 13 + wave * 1.4),
+    count: Math.min(32, 8 + wave * 3),
+    interval: Math.max(0.45, 1.7 - wave * 0.12),
+    speed: Math.min(42, 18 + wave * 2),
   };
 }
 
@@ -251,6 +260,7 @@ function startGame() {
     levels: {},
     silo: { ready: BASE_SILO_CAPACITY, reloadTime: 0 },
     aimAngle: Math.PI / 2,
+    launcherDownTime: 0,
     enemies: [],
     interceptors: [],
     blasts: [],
@@ -275,6 +285,7 @@ function startGame() {
   const interceptorSpeed = () => BASE_INTERCEPTOR_SPEED * (1 + 0.2 * levelOf("speed"));
   const siloCapacity = () => BASE_SILO_CAPACITY + levelOf("silo");
   const reloadSeconds = () => BASE_RELOAD_SECONDS * 0.85 ** levelOf("reload");
+
   function setState(state) {
     game.state = state;
     game.stateTime = 0;
@@ -299,6 +310,7 @@ function startGame() {
     game.blasts = [];
     game.popups = [];
     game.silo = { ready: siloCapacity(), reloadTime: 0 };
+    game.launcherDownTime = 0;
     setState("wave");
   }
 
@@ -324,13 +336,28 @@ function startGame() {
       trail: [...trail],
       splitY: kind === "splitter" ? randomBetween(...SPLIT_HEIGHT_RANGE) : Infinity,
       retargetTime: randomBetween(...DODGER_RETARGET_SECONDS),
+      dropTime: randomBetween(...BOMBER_DROP_SECONDS),
+      dropsLeft: BOMBER_DROPS,
       isAlive: true,
     };
   }
 
+  function createBomber(speed) {
+    const isFromLeft = Math.random() < 0.5;
+    const startX = isFromLeft ? -BOMBER_EXIT_MARGIN : WIDTH + BOMBER_EXIT_MARGIN;
+    const bomber = createEnemy("bomber", startX, randomBetween(...BOMBER_Y_RANGE), startX, speed);
+    bomber.heading = isFromLeft ? 0 : Math.PI;
+    return bomber;
+  }
+
   function spawnEnemy(kind) {
     const speed = game.waveSpeed * ENEMY_KINDS[kind].speedFactor;
-    game.enemies.push(createEnemy(kind, randomBetween(SPAWN_MIN_X, SPAWN_MAX_X), -2, randomBetween(TARGET_MIN_X, TARGET_MAX_X), speed));
+    if (kind === "bomber") {
+      game.enemies.push(createBomber(speed));
+      return;
+    }
+    const targetX = kind === "hunter" ? LAUNCHER_X : randomBetween(TARGET_MIN_X, TARGET_MAX_X);
+    game.enemies.push(createEnemy(kind, randomBetween(SPAWN_MIN_X, SPAWN_MAX_X), -2, targetX, speed));
   }
 
   function updateSpawning(deltaSeconds) {
@@ -378,7 +405,48 @@ function startGame() {
     }
   }
 
+  function hitLauncher() {
+    game.launcherDownTime = LAUNCHER_DOWN_SECONDS;
+    game.silo.reloadTime = 0;
+    particles.emit(LAUNCHER_X, LAUNCHER_Y, { count: 30, angle: -Math.PI / 2, spread: 2, speed: [20, 70], lifetime: [0.3, 0.9], sizes: [1, 2], fall: 90 });
+    sounds.impact();
+    glitch.trigger("hit");
+  }
+
+  function landEnemy(enemy) {
+    enemy.isAlive = false;
+    if (enemy.kind === "hunter" && Math.abs(enemy.x - LAUNCHER_X) <= LAUNCHER_HIT_RADIUS) {
+      hitLauncher();
+    } else {
+      damageCity(enemy);
+    }
+  }
+
+  function dropBomb(bomber) {
+    bomber.dropsLeft -= 1;
+    bomber.dropTime = randomBetween(...BOMBER_DROP_SECONDS);
+    const speed = game.waveSpeed * ENEMY_KINDS.warhead.speedFactor;
+    game.enemies.push(createEnemy("warhead", bomber.x, bomber.y + 2, randomBetween(TARGET_MIN_X, TARGET_MAX_X), speed));
+  }
+
+  function moveBomber(bomber, deltaSeconds) {
+    bomber.x += Math.cos(bomber.heading) * bomber.speed * deltaSeconds;
+    recordTrail(bomber.trail, bomber.x, bomber.y, ENEMY_TRAIL_POINTS);
+    bomber.dropTime -= deltaSeconds;
+    const isOverCity = bomber.x >= BOMBER_DROP_MARGIN && bomber.x <= WIDTH - BOMBER_DROP_MARGIN;
+    if (bomber.dropTime <= 0 && bomber.dropsLeft > 0 && isOverCity) {
+      dropBomb(bomber);
+    }
+    if (bomber.x < -BOMBER_EXIT_MARGIN - 1 || bomber.x > WIDTH + BOMBER_EXIT_MARGIN + 1) {
+      bomber.isAlive = false;
+    }
+  }
+
   function moveEnemy(enemy, deltaSeconds) {
+    if (enemy.kind === "bomber") {
+      moveBomber(enemy, deltaSeconds);
+      return;
+    }
     if (enemy.kind === "dodger") {
       steerDodger(enemy, deltaSeconds);
     } else if (enemy.kind === "sprinter" && enemy.y >= SPRINT_START_Y) {
@@ -390,13 +458,12 @@ function startGame() {
     if (enemy.y >= enemy.splitY) {
       splitEnemy(enemy);
     } else if (enemy.y >= IMPACT_Y) {
-      enemy.isAlive = false;
-      damageCity(enemy);
+      landEnemy(enemy);
     }
   }
 
   function launchInterceptor(point) {
-    if (game.silo.ready === 0) {
+    if (game.silo.ready === 0 || game.launcherDownTime > 0) {
       sounds.empty();
       return;
     }
@@ -420,6 +487,10 @@ function startGame() {
   }
 
   function updateSilo(deltaSeconds) {
+    if (game.launcherDownTime > 0) {
+      game.launcherDownTime = Math.max(0, game.launcherDownTime - deltaSeconds);
+      return;
+    }
     if (game.silo.ready >= siloCapacity()) {
       game.silo.reloadTime = 0;
       return;
@@ -778,8 +849,15 @@ function startGame() {
   function drawEnemies() {
     game.enemies.forEach((enemy) => {
       drawTrail(enemy.trail, 0.75);
-      const size = ENEMY_KINDS[enemy.kind].headSize;
-      buffer.rect(Math.round(enemy.x) - Math.floor(size / 2), Math.round(enemy.y) - Math.floor(size / 2), size, size, COLORS.bright);
+      const x = Math.round(enemy.x);
+      const y = Math.round(enemy.y);
+      if (enemy.kind === "hunter") {
+        buffer.rect(x - 1, y, 3, 1, COLORS.bright);
+        buffer.rect(x, y - 1, 1, 3, COLORS.bright);
+        return;
+      }
+      const { width, height } = ENEMY_KINDS[enemy.kind];
+      buffer.rect(x - Math.floor(width / 2), y - Math.floor(height / 2), width, height, COLORS.bright);
     });
   }
 
@@ -802,10 +880,15 @@ function startGame() {
   }
 
   function drawLauncher() {
-    buffer.rect(LAUNCHER_X - 1, LAUNCHER_Y, 2, GROUND_Y - LAUNCHER_Y, COLORS.mast);
+    const isDown = game.launcherDownTime > 0;
+    buffer.rect(LAUNCHER_X - 1, LAUNCHER_Y, 2, GROUND_Y - LAUNCHER_Y, isDown ? COLORS.faint : COLORS.mast);
     buffer.rect(LAUNCHER_X - 3, GROUND_Y - 2, 6, 2, COLORS.dim);
+    const barrelColor = isDown ? COLORS.faint : COLORS.bright;
     for (let step = 0; step <= 3; step++) {
-      buffer.rect(LAUNCHER_X + Math.cos(game.aimAngle) * step, LAUNCHER_Y - Math.sin(game.aimAngle) * step, 1, 1, COLORS.bright);
+      buffer.rect(LAUNCHER_X + Math.cos(game.aimAngle) * step, LAUNCHER_Y - Math.sin(game.aimAngle) * step, 1, 1, barrelColor);
+    }
+    if (isDown && isBlinkOn()) {
+      drawCenteredText("LAUNCHER DOWN", LAUNCHER_Y - 14, { color: COLORS.bright });
     }
   }
 
