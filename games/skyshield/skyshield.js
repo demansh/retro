@@ -15,22 +15,20 @@ const HEIGHT = 192;
 const GROUND_Y = 186;
 const IMPACT_Y = 180;
 const MAX_TARGET_Y = 166;
-const ANTENNA_X = 54;
-const ANTENNA_Y = 172;
-const ANTENNA_GAP_LEFT = 48;
-const ANTENNA_GAP_RIGHT = 60;
+const LAUNCHER_X = 54;
+const LAUNCHER_Y = 172;
+const LAUNCHER_GAP_LEFT = 48;
+const LAUNCHER_GAP_RIGHT = 60;
 const SPAWN_MIN_X = 4;
 const SPAWN_MAX_X = 104;
 const TARGET_MIN_X = 6;
 const TARGET_MAX_X = 102;
-const BEAM_MIN_ANGLE = 0.04;
-const BEAM_MAX_ANGLE = Math.PI - 0.04;
-const BEAM_LENGTH = 200;
-const BEAM_START = 5;
-const BASE_SWEEP_SPEED = 2;
-const BASE_BLIP_FADE = 2.6;
-const PINGS_PER_ENEMY = 2;
-const RANGE_ARC_RADII = [50, 100, 150];
+const ENEMY_TRAIL_POINTS = 18;
+const INTERCEPTOR_TRAIL_POINTS = 8;
+const TRAIL_SPACING = 1;
+const SPRINT_START_Y = 90;
+const SPRINT_SPEED_FACTOR = 2.4;
+const SPRINT_ACCELERATION = 40;
 const BASE_INTERCEPTOR_SPEED = 120;
 const BASE_BLAST_RADIUS = 10;
 const BLAST_GROW_SECONDS = 0.18;
@@ -75,19 +73,17 @@ const BACK_ITEM = { id: "back", label: "BACK" };
 const CONTROLLABLE_STATES = new Set(["title", "wave", "upgrade", "fall"]);
 const SIMULATED_STATES = new Set(["wave", "fall"]);
 const ENEMY_KINDS = {
-  warhead: { label: "WARHEAD", score: 25, damage: 2, speedFactor: 1, intensity: 1, fadeFactor: 1, unlockWave: 1, weight: 4 },
-  splitter: { label: "SPLITTER", score: 50, damage: 2, speedFactor: 0.9, intensity: 1, fadeFactor: 1, unlockWave: 3, weight: 1.5 },
-  dodger: { label: "DODGER", score: 50, damage: 2, speedFactor: 1, intensity: 1, fadeFactor: 1, unlockWave: 5, weight: 1.5 },
-  stealth: { label: "STEALTH", score: 75, damage: 2, speedFactor: 0.9, intensity: 0.55, fadeFactor: 0.4, unlockWave: 7, weight: 1.2 },
-  fragment: { label: "FRAGMENT", score: 15, damage: 1, speedFactor: 1.15, intensity: 0.8, fadeFactor: 1, unlockWave: Infinity, weight: 0 },
+  warhead: { label: "WARHEAD", score: 25, damage: 2, speedFactor: 1, headSize: 2, unlockWave: 1, weight: 4 },
+  splitter: { label: "SPLITTER", score: 50, damage: 2, speedFactor: 0.9, headSize: 2, unlockWave: 3, weight: 1.5 },
+  dodger: { label: "DODGER", score: 50, damage: 2, speedFactor: 1, headSize: 2, unlockWave: 5, weight: 1.5 },
+  sprinter: { label: "SPRINTER", score: 75, damage: 2, speedFactor: 0.7, headSize: 2, unlockWave: 7, weight: 1.2 },
+  fragment: { label: "FRAGMENT", score: 15, damage: 1, speedFactor: 1.15, headSize: 1, unlockWave: Infinity, weight: 0 },
 };
 const UPGRADES = [
   { id: "blast", label: "BLAST +", detail: "BIGGER EXPLOSIONS", maxLevel: 4 },
   { id: "speed", label: "SPEED +", detail: "FASTER INTERCEPTORS", maxLevel: 4 },
   { id: "silo", label: "SILO +1", detail: "ONE MORE READY MISSILE", maxLevel: 4 },
   { id: "reload", label: "RELOAD", detail: "SILO RELOADS FASTER", maxLevel: 4 },
-  { id: "radar", label: "RADAR", detail: "FASTER BEAM SWEEP", maxLevel: 3 },
-  { id: "phosphor", label: "PHOSPHOR", detail: "BLIPS FADE SLOWER", maxLevel: 3 },
   { id: "repair", label: "REPAIR", detail: `CITY +${REPAIR_HP} HP`, maxLevel: Infinity },
 ];
 const COLORS = {
@@ -95,8 +91,8 @@ const COLORS = {
   score: "#d8d8d8",
   dim: "#808080",
   faint: "#505050",
-  arc: "#262626",
-  beam: "#6a6a6a",
+  hpFill: "#ffffff",
+  hpEmpty: "#3a3a3a",
   ground: "#1c1c1c",
   groundEdge: "#6c6c6c",
   building: "#4a4a4a",
@@ -150,7 +146,6 @@ function createSounds(audio) {
   const arpeggio = (frequencies, step, duration) =>
     frequencies.forEach((frequency, index) => audio.tone({ frequency, duration, delay: index * step }));
   return {
-    ping: () => audio.tone({ frequency: 1760, duration: 0.03, volume: 0.03, type: "triangle" }),
     launch: () => audio.tone({ frequency: 300, slideTo: 900, duration: 0.15, volume: 0.08 }),
     empty: () => audio.tone({ frequency: 120, duration: 0.05, volume: 0.08 }),
     blast: () => audio.noise({ duration: 0.3, volume: 0.16, highpass: 400 }),
@@ -174,8 +169,8 @@ function buildCity() {
   let x = 2;
   while (x < WIDTH - 4) {
     const width = randomInt(4, 7);
-    if (x + width > ANTENNA_GAP_LEFT && x < ANTENNA_GAP_RIGHT) {
-      x = ANTENNA_GAP_RIGHT;
+    if (x + width > LAUNCHER_GAP_LEFT && x < LAUNCHER_GAP_RIGHT) {
+      x = LAUNCHER_GAP_RIGHT;
       continue;
     }
     if (x + width > WIDTH - 2) {
@@ -196,18 +191,12 @@ function buildCity() {
   return buildings;
 }
 
-function buildArcPoints() {
-  return RANGE_ARC_RADII.flatMap((radius) => {
-    const pointCount = Math.round(radius / 2);
-    return Array.from({ length: pointCount + 1 }, (_, index) => {
-      const angle = (index / pointCount) * Math.PI;
-      return { x: Math.round(ANTENNA_X + Math.cos(angle) * radius), y: Math.round(ANTENNA_Y - Math.sin(angle) * radius) };
-    }).filter((point) => point.x >= 0 && point.x < WIDTH && point.y >= 0);
-  });
-}
-
-function bearingOf(x, y) {
-  return clamp(Math.atan2(ANTENNA_Y - y, x - ANTENNA_X), BEAM_MIN_ANGLE, BEAM_MAX_ANGLE);
+function recordTrail(trail, x, y, maxPoints) {
+  const last = trail[0];
+  if (!last || Math.hypot(x - last.x, y - last.y) >= TRAIL_SPACING) {
+    trail.unshift({ x, y });
+    trail.length = Math.min(trail.length, maxPoints);
+  }
 }
 
 function waveParameters(wave) {
@@ -245,7 +234,6 @@ function startGame() {
   const sounds = createSounds(audio);
   const settings = createSettings();
   const recordsStore = createStore("skyshield", 1, { best: 0, bestWave: 0 });
-  const arcPoints = buildArcPoints();
   let records = sanitizeRecords(recordsStore.load());
 
   const game = {
@@ -262,8 +250,7 @@ function startGame() {
     buildings: buildCity(),
     levels: {},
     silo: { ready: BASE_SILO_CAPACITY, reloadTime: 0 },
-    beamAngle: Math.PI / 2,
-    beamDirection: 1,
+    aimAngle: Math.PI / 2,
     enemies: [],
     interceptors: [],
     blasts: [],
@@ -288,9 +275,6 @@ function startGame() {
   const interceptorSpeed = () => BASE_INTERCEPTOR_SPEED * (1 + 0.2 * levelOf("speed"));
   const siloCapacity = () => BASE_SILO_CAPACITY + levelOf("silo");
   const reloadSeconds = () => BASE_RELOAD_SECONDS * 0.85 ** levelOf("reload");
-  const sweepSpeed = () => BASE_SWEEP_SPEED * (1 + 0.15 * levelOf("radar"));
-  const blipFade = () => BASE_BLIP_FADE + 0.7 * levelOf("phosphor");
-
   function setState(state) {
     game.state = state;
     game.stateTime = 0;
@@ -328,15 +312,16 @@ function startGame() {
     startWave(1);
   }
 
-  function createEnemy(kind, x, y, targetX, speed) {
+  function createEnemy(kind, x, y, targetX, speed, trail = []) {
     return {
       kind,
       x,
       y,
       targetX,
       speed,
+      sprintSpeed: speed * SPRINT_SPEED_FACTOR,
       heading: Math.atan2(IMPACT_Y - y, targetX - x),
-      pings: [],
+      trail: [...trail],
       splitY: kind === "splitter" ? randomBetween(...SPLIT_HEIGHT_RANGE) : Infinity,
       retargetTime: randomBetween(...DODGER_RETARGET_SECONDS),
       isAlive: true,
@@ -364,7 +349,7 @@ function startGame() {
     const speed = game.waveSpeed * ENEMY_KINDS.fragment.speedFactor;
     [-1, 0, 1].forEach((side) => {
       const targetX = clamp(enemy.targetX + side * FRAGMENT_SPREAD_X, TARGET_MIN_X, TARGET_MAX_X);
-      game.enemies.push(createEnemy("fragment", enemy.x, enemy.y, targetX, speed));
+      game.enemies.push(createEnemy("fragment", enemy.x, enemy.y, targetX, speed, enemy.trail));
     });
   }
 
@@ -396,45 +381,17 @@ function startGame() {
   function moveEnemy(enemy, deltaSeconds) {
     if (enemy.kind === "dodger") {
       steerDodger(enemy, deltaSeconds);
+    } else if (enemy.kind === "sprinter" && enemy.y >= SPRINT_START_Y) {
+      enemy.speed = Math.min(enemy.sprintSpeed, enemy.speed + SPRINT_ACCELERATION * deltaSeconds);
     }
     enemy.x = clamp(enemy.x + Math.cos(enemy.heading) * enemy.speed * deltaSeconds, 1, WIDTH - 1);
     enemy.y += Math.sin(enemy.heading) * enemy.speed * deltaSeconds;
-    enemy.pings.forEach((ping) => (ping.age += deltaSeconds));
+    recordTrail(enemy.trail, enemy.x, enemy.y, ENEMY_TRAIL_POINTS);
     if (enemy.y >= enemy.splitY) {
       splitEnemy(enemy);
     } else if (enemy.y >= IMPACT_Y) {
       enemy.isAlive = false;
       damageCity(enemy);
-    }
-  }
-
-  function updateBeam(deltaSeconds) {
-    const previousAngle = game.beamAngle;
-    let sweptMin = previousAngle;
-    let sweptMax = previousAngle;
-    game.beamAngle += game.beamDirection * sweepSpeed() * deltaSeconds;
-    if (game.beamAngle >= BEAM_MAX_ANGLE || game.beamAngle <= BEAM_MIN_ANGLE) {
-      const bound = game.beamAngle >= BEAM_MAX_ANGLE ? BEAM_MAX_ANGLE : BEAM_MIN_ANGLE;
-      sweptMin = Math.min(sweptMin, bound);
-      sweptMax = Math.max(sweptMax, bound);
-      game.beamAngle = bound;
-      game.beamDirection *= -1;
-    }
-    return { min: Math.min(sweptMin, game.beamAngle), max: Math.max(sweptMax, game.beamAngle) };
-  }
-
-  function detectEnemies(swept) {
-    let hasDetected = false;
-    game.enemies.forEach((enemy) => {
-      const bearing = bearingOf(enemy.x, enemy.y);
-      if (bearing >= swept.min && bearing <= swept.max) {
-        enemy.pings.unshift({ x: enemy.x, y: enemy.y, age: 0 });
-        enemy.pings.length = Math.min(enemy.pings.length, PINGS_PER_ENEMY);
-        hasDetected = true;
-      }
-    });
-    if (hasDetected && game.state === "wave") {
-      sounds.ping();
     }
   }
 
@@ -445,16 +402,18 @@ function startGame() {
     }
     const targetX = clamp(point.x, 1, WIDTH - 1);
     const targetY = clamp(point.y, 1, MAX_TARGET_Y);
-    const distance = Math.hypot(targetX - ANTENNA_X, targetY - ANTENNA_Y);
+    const distance = Math.hypot(targetX - LAUNCHER_X, targetY - LAUNCHER_Y);
     const speed = interceptorSpeed();
     game.silo.ready -= 1;
+    game.aimAngle = Math.atan2(LAUNCHER_Y - targetY, targetX - LAUNCHER_X);
     game.interceptors.push({
-      x: ANTENNA_X,
-      y: ANTENNA_Y,
+      x: LAUNCHER_X,
+      y: LAUNCHER_Y,
+      trail: [],
       targetX,
       targetY,
-      vx: ((targetX - ANTENNA_X) / distance) * speed,
-      vy: ((targetY - ANTENNA_Y) / distance) * speed,
+      vx: ((targetX - LAUNCHER_X) / distance) * speed,
+      vy: ((targetY - LAUNCHER_Y) / distance) * speed,
       remaining: distance / speed,
     });
     sounds.launch();
@@ -486,6 +445,7 @@ function startGame() {
       }
       interceptor.x += interceptor.vx * deltaSeconds;
       interceptor.y += interceptor.vy * deltaSeconds;
+      recordTrail(interceptor.trail, interceptor.x, interceptor.y, INTERCEPTOR_TRAIL_POINTS);
       return true;
     });
   }
@@ -786,7 +746,6 @@ function startGame() {
     }
     game.stateTime += deltaSeconds;
     particles.update(deltaSeconds);
-    detectEnemies(updateBeam(deltaSeconds));
     if (SIMULATED_STATES.has(game.state)) {
       updateSimulation(deltaSeconds);
     }
@@ -807,33 +766,20 @@ function startGame() {
     drawCenteredText(text, y, { color });
   }
 
-  function drawRadar() {
-    arcPoints.forEach((point) => buffer.rect(point.x, point.y, 1, 1, COLORS.arc));
-    const directionX = Math.cos(game.beamAngle);
-    const directionY = -Math.sin(game.beamAngle);
-    for (let distance = BEAM_START; distance < BEAM_LENGTH; distance++) {
-      const x = ANTENNA_X + directionX * distance;
-      const y = ANTENNA_Y + directionY * distance;
-      if (x < 0 || x >= WIDTH || y < 0) {
-        break;
+  function drawTrail(trail, brightness) {
+    trail.forEach((point, index) => {
+      const level = brightness * (1 - index / trail.length) ** 1.5;
+      if (level > 0.04) {
+        buffer.rect(point.x, point.y, 1, 1, gray(level));
       }
-      buffer.rect(x, y, 1, 1, COLORS.beam);
-    }
+    });
   }
 
-  function drawBlips() {
-    const fade = blipFade();
+  function drawEnemies() {
     game.enemies.forEach((enemy) => {
-      const profile = ENEMY_KINDS[enemy.kind];
-      const lifetime = fade * profile.fadeFactor;
-      enemy.pings.forEach((ping, index) => {
-        const level = profile.intensity * (1 - ping.age / lifetime) * (index === 0 ? 1 : 0.5);
-        if (level <= 0.04) {
-          return;
-        }
-        const size = index === 0 && enemy.kind !== "fragment" ? 2 : 1;
-        buffer.rect(Math.round(ping.x) - Math.floor(size / 2), Math.round(ping.y) - Math.floor(size / 2), size, size, gray(level));
-      });
+      drawTrail(enemy.trail, 0.75);
+      const size = ENEMY_KINDS[enemy.kind].headSize;
+      buffer.rect(Math.round(enemy.x) - Math.floor(size / 2), Math.round(enemy.y) - Math.floor(size / 2), size, size, COLORS.bright);
     });
   }
 
@@ -855,16 +801,17 @@ function startGame() {
     });
   }
 
-  function drawAntenna() {
-    buffer.rect(ANTENNA_X - 1, ANTENNA_Y, 2, GROUND_Y - ANTENNA_Y, COLORS.mast);
-    buffer.rect(ANTENNA_X - 3, GROUND_Y - 2, 6, 2, COLORS.dim);
+  function drawLauncher() {
+    buffer.rect(LAUNCHER_X - 1, LAUNCHER_Y, 2, GROUND_Y - LAUNCHER_Y, COLORS.mast);
+    buffer.rect(LAUNCHER_X - 3, GROUND_Y - 2, 6, 2, COLORS.dim);
     for (let step = 0; step <= 3; step++) {
-      buffer.rect(ANTENNA_X + Math.cos(game.beamAngle) * step, ANTENNA_Y - Math.sin(game.beamAngle) * step, 1, 1, COLORS.bright);
+      buffer.rect(LAUNCHER_X + Math.cos(game.aimAngle) * step, LAUNCHER_Y - Math.sin(game.aimAngle) * step, 1, 1, COLORS.bright);
     }
   }
 
   function drawInterceptors() {
     game.interceptors.forEach((interceptor) => {
+      drawTrail(interceptor.trail, 0.6);
       buffer.rect(interceptor.x, interceptor.y, 1, 1, COLORS.bright);
       if (isBlinkOn()) {
         buffer.rect(interceptor.targetX - 1, interceptor.targetY, 3, 1, COLORS.dim);
@@ -898,19 +845,18 @@ function startGame() {
     drawCenteredText(`WAVE ${game.wave}`, 3, { color: COLORS.dim });
     const capacity = siloCapacity();
     for (let index = 0; index < capacity; index++) {
-      buffer.rect(3 + index * 4, GROUND_Y + 3, 2, 2, index < game.silo.ready ? COLORS.bright : COLORS.faint);
+      buffer.rect(3 + index * 4, GROUND_Y + 2, 3, 3, index < game.silo.ready ? COLORS.bright : COLORS.faint);
     }
-    const barWidth = 40;
+    const barWidth = 44;
     const barLeft = WIDTH - 3 - barWidth;
-    buffer.rect(barLeft, GROUND_Y + 3, barWidth, 2, COLORS.faint);
-    buffer.rect(barLeft, GROUND_Y + 3, Math.round((barWidth * game.cityHp) / CITY_MAX_HP), 2, COLORS.dim);
+    buffer.rect(barLeft, GROUND_Y + 2, barWidth, 3, COLORS.hpEmpty);
+    buffer.rect(barLeft, GROUND_Y + 2, Math.round((barWidth * game.cityHp) / CITY_MAX_HP), 3, COLORS.hpFill);
   }
 
   function drawWorld(scene) {
-    drawRadar();
-    drawBlips();
+    drawEnemies();
     drawCity();
-    drawAntenna();
+    drawLauncher();
     drawInterceptors();
     drawBlasts();
     particles.draw(buffer.context);
@@ -931,10 +877,10 @@ function startGame() {
       drawCenteredText(isTouchDevice ? "TAP TO START" : "CLICK TO START", 66, { color: COLORS.bright });
     }
     const hints = [
-      "MISSILES SHOW ONLY",
-      "WHEN THE RADAR SEES THEM",
+      "PROTECT THE CITY",
       "",
       isTouchDevice ? "TAP: LAUNCH INTERCEPTOR" : "CLICK: LAUNCH INTERCEPTOR",
+      "IT BLOWS UP WHERE YOU AIM",
       "LEAD YOUR TARGETS",
       isTouchDevice ? "II: PAUSE" : "ESC: PAUSE",
     ];
