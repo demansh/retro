@@ -63,6 +63,7 @@ const UNUSED_SHOT_SCORE = 300;
 const LEVEL_BANNER_SECONDS = 1.6;
 const LOST_PAUSE_SECONDS = 1.8;
 const CLEAR_INPUT_DELAY_SECONDS = 1;
+const LOST_INPUT_DELAY_SECONDS = 1;
 const GAME_OVER_INPUT_DELAY_SECONDS = 1;
 const EXIT_FALLBACK_MS = 700;
 const LOW_QUALITY_FRAME_SECONDS = 1 / 40;
@@ -1007,6 +1008,10 @@ function startGame() {
     return index >= 0 && index < currentPauseItems().length && Math.abs(point.y - itemCenterY) <= PAUSE_ITEM_SPACING / 2 ? index : -1;
   }
 
+  function isRetryAvailable() {
+    return game.state === "lost" && game.lives > 0 && game.stateTime >= LOST_INPUT_DELAY_SECONDS;
+  }
+
   function handleAction(point) {
     if (!game.isReady || game.isExiting) {
       return;
@@ -1021,6 +1026,8 @@ function startGame() {
       }
     } else if (game.state === "clear" && game.stateTime >= CLEAR_INPUT_DELAY_SECONDS) {
       advanceLevel();
+    } else if (isRetryAvailable()) {
+      restartLevel();
     } else if (game.state === "over" && game.stateTime >= GAME_OVER_INPUT_DELAY_SECONDS) {
       startRun();
     }
@@ -1098,12 +1105,8 @@ function startGame() {
       if ((isCalm && game.stateTime >= SETTLE_MIN_SECONDS) || game.stateTime >= SETTLE_TIMEOUT_SECONDS) {
         finishSettle();
       }
-    } else if (game.state === "lost" && game.stateTime >= LOST_PAUSE_SECONDS) {
-      if (game.lives > 0) {
-        restartLevel();
-      } else {
-        finishRun();
-      }
+    } else if (game.state === "lost" && game.lives === 0 && game.stateTime >= LOST_PAUSE_SECONDS) {
+      finishRun();
     }
     if ((game.state === "aim" || game.state === "charge") && targetsLeft() === 0) {
       clearLevel();
@@ -1276,6 +1279,9 @@ function startGame() {
     } else if (scene === "lost") {
       drawBannerText("OUT OF AMMO", 30);
       drawBannerText(game.lives > 0 ? `LIVES ${game.lives}` : "NO LIVES LEFT", 42, COLORS.dim);
+      if (isRetryAvailable() && isBlinkOn()) {
+        drawBannerText(isTouchDevice ? "TAP TO RETRY" : "SPACE TO RETRY", 54);
+      }
     } else if (game.levelBannerTime > 0) {
       drawBannerText(`LEVEL ${game.level}`, 30);
       drawBannerText(game.blocks.filter((block) => block.material === "target").length > 1 ? "DESTROY THE TARGETS" : "DESTROY THE TARGET", 42, COLORS.dim);
