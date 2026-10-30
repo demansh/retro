@@ -39,12 +39,7 @@ const CAR_LENGTH = 300;
 const LANE_CHANGE_RATE = 0.7;
 const NEAR_MISS_GAP = 0.2;
 const NEAR_MISS_SECONDS = 1;
-const CRASH_PENALTY_SECONDS = 2;
-const HEAD_ON_PENALTY_SECONDS = 5;
-const BARRIER_PENALTY_SECONDS = 3;
-const CRASH_KNOCK = 0.3;
 const TIME_DELTA_SECONDS = 1.2;
-const INVULNERABLE_SECONDS = 1.2;
 const START_SECONDS = 40;
 const CHECKPOINT_BONUS = 32;
 const CHECKPOINT_BONUS_MIN = 24;
@@ -156,7 +151,7 @@ function createSky() {
 }
 
 function createPlayer() {
-  return { x: 0, speed: 0, steer: 0, invulnerable: 0, isOffroad: false, isBraking: false, bounce: 0 };
+  return { x: 0, speed: 0, steer: 0, isOffroad: false, isBraking: false, bounce: 0 };
 }
 
 function createRace() {
@@ -237,9 +232,9 @@ function startGame() {
     race.message.scale = scale;
   }
 
-  function changeTime(seconds) {
-    race.timeLeft = Math.max(0, race.timeLeft + seconds);
-    race.timeDelta.text = seconds > 0 ? `+${seconds}` : `-${-seconds}`;
+  function addTime(seconds) {
+    race.timeLeft += seconds;
+    race.timeDelta.text = `+${seconds}`;
     race.timeDelta.timer = TIME_DELTA_SECONDS;
   }
 
@@ -311,7 +306,6 @@ function startGame() {
     player.x -= CENTRIFUGAL * speedRatio * speedRatio * segment.curve * deltaSeconds;
     player.x = clamp(player.x, -MAX_PLAYER_X, MAX_PLAYER_X);
     player.isOffroad = Math.abs(player.x) > 1;
-    player.invulnerable = Math.max(0, player.invulnerable - deltaSeconds);
     applyThrottle(deltaSeconds, canAccelerate);
     player.bounce = player.isOffroad && player.speed > 0 && Math.random() < 0.5 ? 1 : 0;
     race.position += player.speed * deltaSeconds;
@@ -455,38 +449,29 @@ function startGame() {
     particles.emit(x, playerScreenY() - 8, { count, angle: -Math.PI / 2, spread: Math.PI * 1.4, speed: [30, 110], lifetime: [0.3, 0.9], sizes: [1, 2, 2], fall: 140 });
   }
 
-  function knockAwayFrom(obstacleX) {
-    const side = player.x >= obstacleX ? 1 : -1;
-    player.x = clamp(player.x + side * CRASH_KNOCK, -MAX_PLAYER_X, MAX_PLAYER_X);
+  function stopCar(text) {
+    player.speed = 0;
     player.steer = 0;
-  }
-
-  function penalize(text, seconds) {
-    player.invulnerable = INVULNERABLE_SECONDS;
     glitch.trigger("goal");
     sounds.crash();
-    changeTime(-seconds);
-    setMessage(`${text} -${seconds} SEC`, 1.4, 2);
+    setMessage(text, 1.2, 2);
   }
 
   function crash(car) {
     car.wasHit = true;
     if (car.direction < 0) {
-      player.speed = MAX_SPEED * 0.05;
       car.isGone = true;
       emitCrash(WIDTH / 2, 60);
-      penalize("HEAD-ON", HEAD_ON_PENALTY_SECONDS);
+      stopCar("HEAD-ON");
       return;
     }
-    player.speed = Math.min(player.speed, car.speed) * 0.6;
     emitCrash(WIDTH / 2 + (car.x - player.x) * 96, 36);
-    knockAwayFrom(car.x);
-    penalize("CRASH", CRASH_PENALTY_SECONDS);
+    stopCar("CRASH");
   }
 
   function nearMiss() {
     race.nearMisses += 1;
-    changeTime(NEAR_MISS_SECONDS);
+    addTime(NEAR_MISS_SECONDS);
     sounds.nearMiss();
     setMessage(`CLOSE! +${NEAR_MISS_SECONDS}`, 0.9);
   }
@@ -497,7 +482,7 @@ function startGame() {
       const relative = car.z - currentZ;
       const lateral = Math.abs(car.x - player.x);
       const halfWidths = (PLAYER_WIDTH + CAR_TYPES[car.type].width) / 2;
-      if (!car.wasHit && player.invulnerable <= 0 && Math.abs(relative) < CAR_LENGTH && lateral < halfWidths * 0.85) {
+      if (!car.wasHit && Math.abs(relative) < CAR_LENGTH && lateral < halfWidths * 0.85) {
         crash(car);
       } else if (!car.isPassed && car.previousRelative > 0 && relative <= 0) {
         car.isPassed = true;
@@ -519,10 +504,8 @@ function startGame() {
 
   function hitBarrier(barrier) {
     barrier.isHit = true;
-    player.speed *= 0.35;
     emitCrash(WIDTH / 2 + (barrier.x - player.x) * 96, 40);
-    knockAwayFrom(barrier.x);
-    penalize("BARRIER", BARRIER_PENALTY_SECONDS);
+    stopCar("CRASH");
   }
 
   function checkObstacles(segment) {
@@ -542,7 +525,7 @@ function startGame() {
   function reachCheckpoint() {
     race.stage += 1;
     const bonus = Math.max(CHECKPOINT_BONUS_MIN, CHECKPOINT_BONUS - (race.stage - 1) * CHECKPOINT_BONUS_DECAY);
-    changeTime(bonus);
+    addTime(bonus);
     glitch.trigger("hit");
     sounds.checkpoint();
     setMessage(`CHECKPOINT +${bonus}`, 2, 1);
@@ -1210,9 +1193,6 @@ function startGame() {
   }
 
   function drawPlayer() {
-    if (player.invulnerable > 0 && isBlinkOn(10)) {
-      return;
-    }
     const centerX = Math.round(WIDTH / 2);
     const baseY = playerScreenY();
     const lean = Math.round(player.steer);
@@ -1241,10 +1221,7 @@ function startGame() {
     if (timer <= 0 || text === "") {
       return;
     }
-    const isPenalty = text.startsWith("-");
-    if (!isPenalty || isBlinkOn(8)) {
-      drawText(buffer.context, text, x, 5, { scale: 2, color: isPenalty ? COLORS.bright : COLORS.dim });
-    }
+    drawText(buffer.context, text, x, 5, { scale: 2, color: COLORS.dim });
   }
 
   function drawHud() {
@@ -1291,7 +1268,7 @@ function startGame() {
     }
     drawCenteredText(isTouchDevice ? "HOLD: GAS   DRAG: STEER" : "UP: GAS   LEFT/RIGHT: STEER", 66, { color: COLORS.dim });
     drawCenteredText(isTouchDevice ? "II: PAUSE" : "ESC: PAUSE", 74, { color: COLORS.dim });
-    drawCenteredText(`CLOSE PASS +${NEAR_MISS_SECONDS} SEC   CRASH -${CRASH_PENALTY_SECONDS} SEC`, 84, { color: COLORS.bright });
+    drawCenteredText(`CLOSE PASS +${NEAR_MISS_SECONDS} SEC   CRASH: FULL STOP`, 84, { color: COLORS.bright });
     drawCenteredText(`BEST ${formatKilometers(records.bestDistance)} KM   STAGE ${records.bestStage}`, 94, { color: COLORS.dim });
   }
 
