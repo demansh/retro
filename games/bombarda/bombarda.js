@@ -62,7 +62,7 @@ const LEVEL_CLEAR_SCORE = 100;
 const UNUSED_SHOT_SCORE = 300;
 const LEVEL_BANNER_SECONDS = 1.6;
 const LOST_PAUSE_SECONDS = 1.8;
-const CLEAR_PAUSE_SECONDS = 2.2;
+const CLEAR_INPUT_DELAY_SECONDS = 1;
 const GAME_OVER_INPUT_DELAY_SECONDS = 1;
 const EXIT_FALLBACK_MS = 700;
 const LOW_QUALITY_FRAME_SECONDS = 1 / 40;
@@ -417,6 +417,7 @@ function startGame() {
     angleDirection: 1,
     power: MIN_POWER,
     powerDirection: 1,
+    lastPower: null,
     projectiles: [],
     explosions: [],
     rings: [],
@@ -471,6 +472,7 @@ function startGame() {
     game.currentTrail = [];
     game.ghostTrail = [];
     game.ghostAge = TRAIL_FADE_SECONDS;
+    game.lastPower = null;
     game.levelStartScore = game.score;
     game.levelBannerTime = LEVEL_BANNER_SECONDS;
     particles.clear();
@@ -525,7 +527,6 @@ function startGame() {
     if (block.material === "tnt") {
       queueExplosion(block.x + block.w / 2, block.y + block.h / 2, TNT_RADIUS, TNT_DAMAGE, CHAIN_DELAY_SECONDS);
     } else if (block.material === "target") {
-      glitch.trigger("goal");
       sounds.target();
     }
   }
@@ -727,6 +728,7 @@ function startGame() {
     const speed = game.power * MAX_SHOT_SPEED;
     game.projectiles = [createProjectile(kind, x, y, Math.cos(radians) * speed, -Math.sin(radians) * speed)];
     game.shotIndex += 1;
+    game.lastPower = game.power;
     game.currentTrail = [];
     game.trailStep = 0;
     sounds.fire();
@@ -855,7 +857,6 @@ function startGame() {
     game.lastBonus = LEVEL_CLEAR_SCORE * game.level + UNUSED_SHOT_SCORE * shotsLeft();
     game.score += game.lastBonus;
     sounds.levelClear();
-    glitch.trigger("goal");
     setState("clear");
   }
 
@@ -1018,6 +1019,8 @@ function startGame() {
         game.pauseIndex = index;
         activatePauseItem(index);
       }
+    } else if (game.state === "clear" && game.stateTime >= CLEAR_INPUT_DELAY_SECONDS) {
+      advanceLevel();
     } else if (game.state === "over" && game.stateTime >= GAME_OVER_INPUT_DELAY_SECONDS) {
       startRun();
     }
@@ -1095,8 +1098,6 @@ function startGame() {
       if ((isCalm && game.stateTime >= SETTLE_MIN_SECONDS) || game.stateTime >= SETTLE_TIMEOUT_SECONDS) {
         finishSettle();
       }
-    } else if (game.state === "clear" && game.stateTime >= CLEAR_PAUSE_SECONDS) {
-      advanceLevel();
     } else if (game.state === "lost" && game.stateTime >= LOST_PAUSE_SECONDS) {
       if (game.lives > 0) {
         restartLevel();
@@ -1186,6 +1187,9 @@ function startGame() {
     }
     buffer.rect(3, top, 22, 3, COLORS.faint);
     buffer.rect(3, top, Math.round(22 * game.power), 3, COLORS.bright);
+    if (game.lastPower !== null) {
+      buffer.rect(3 + Math.min(21, Math.round(22 * game.lastPower)), top - 1, 1, 5, COLORS.dim);
+    }
   }
 
   function drawBlock(block) {
@@ -1266,6 +1270,9 @@ function startGame() {
     if (scene === "clear") {
       drawBannerText("LEVEL CLEAR", 30);
       drawBannerText(`BONUS ${game.lastBonus}`, 42, COLORS.dim);
+      if (game.stateTime >= CLEAR_INPUT_DELAY_SECONDS && isBlinkOn()) {
+        drawBannerText(isTouchDevice ? "TAP TO CONTINUE" : "SPACE TO CONTINUE", 54);
+      }
     } else if (scene === "lost") {
       drawBannerText("OUT OF AMMO", 30);
       drawBannerText(game.lives > 0 ? `LIVES ${game.lives}` : "NO LIVES LEFT", 42, COLORS.dim);
