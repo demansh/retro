@@ -2,7 +2,7 @@ const TAP_MAX_MS = 250;
 const TAP_MAX_DISTANCE = 10;
 const LONG_PRESS_MS = 500;
 
-export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = () => {}, onKey = () => {}, onInteraction = () => {}, onMenu = () => {}, isMenuZone = () => false, onPress = () => {}, onRelease = () => {}, onKeyUp = () => {} } = {}) {
+export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = null, onKey = () => {}, onInteraction = () => {}, onMenu = () => {}, isMenuZone = () => false, onPress = () => {}, onRelease = () => {}, onKeyUp = () => {} } = {}) {
   const pressedKeys = new Set();
   let gesture = null;
 
@@ -36,6 +36,9 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
       return;
     }
     onPress(event.clientX, event.clientY);
+    if (!onLongPress) {
+      return;
+    }
     gesture.longPressTimer = window.setTimeout(() => {
       if (gesture && !gesture.hasMoved) {
         gesture.isConsumed = true;
