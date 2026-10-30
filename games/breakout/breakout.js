@@ -39,12 +39,16 @@ const SLOW_FACTOR = 0.75;
 const MAX_BOUNCE_ANGLE = Math.PI / 3;
 const MIN_VERTICAL_RATIO = 0.3;
 const STARTING_LIVES = 3;
+const MAX_LIVES = 9;
+const MAX_LIFE_ICONS = 3;
+const EXTRA_LIFE_SCORE_STEP = 2000;
+const EXTRA_LIFE_BANNER_SECONDS = 1.5;
 const MAX_BALLS = 3;
 const MULTI_BALL_SPREAD = 0.4;
 const CAPSULE_WIDTH = 9;
 const CAPSULE_HEIGHT = 7;
 const CAPSULE_SPEED = 32;
-const DROP_CHANCE = 0.14;
+const DROP_CHANCE = 0.2;
 const LASER_SPEED = 200;
 const LASER_HEIGHT = 4;
 const LASER_COOLDOWN_SECONDS = 0.3;
@@ -71,11 +75,13 @@ const PAUSE_ITEMS = [
 const BACK_ITEM = { id: "back", label: "BACK" };
 const CONTROLLABLE_STATES = new Set(["title", "serve", "play", "lost", "clear"]);
 const POWER_UPS = [
-  { id: "expand", letter: "E" },
-  { id: "laser", letter: "L" },
-  { id: "multi", letter: "M" },
-  { id: "slow", letter: "S" },
+  { id: "expand", letter: "E", weight: 3 },
+  { id: "laser", letter: "L", weight: 3 },
+  { id: "multi", letter: "M", weight: 3 },
+  { id: "slow", letter: "S", weight: 3 },
+  { id: "life", letter: "+", weight: 1 },
 ];
+const POWER_UPS_TOTAL_WEIGHT = POWER_UPS.reduce((sum, powerUp) => sum + powerUp.weight, 0);
 const LEVELS = [
   ["222222222", "111111111", "111111111", "111111111", "111111111"],
   ["....1....", "...121...", "..12221..", ".1223221.", "122333221", "111111111"],
@@ -99,6 +105,11 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const toCount = (value) => (Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0);
 const randomSign = () => (Math.random() < 0.5 ? -1 : 1);
 
+function pickPowerUp() {
+  let roll = Math.random() * POWER_UPS_TOTAL_WEIGHT;
+  return POWER_UPS.find((powerUp) => (roll -= powerUp.weight) < 0) ?? POWER_UPS[0];
+}
+
 function sanitizeRecords(raw) {
   return { best: toCount(raw.best) };
 }
@@ -121,6 +132,7 @@ function createSounds(audio) {
     solid: () => audio.tone({ frequency: 140, duration: 0.06, volume: 0.12 }),
     laser: () => audio.tone({ frequency: 1200, slideTo: 600, duration: 0.05, volume: 0.06 }),
     powerUp: () => arpeggio([523, 784, 1047], 0.06, 0.07),
+    extraLife: () => arpeggio([659, 784, 1047, 1319], 0.07, 0.09),
     lifeLost: () => {
       audio.noise({ duration: 0.35, volume: 0.18, highpass: 400 });
       audio.tone({ frequency: 300, slideTo: 80, duration: 0.4, volume: 0.12 });
@@ -181,6 +193,8 @@ function startGame() {
     hasRequestedImmersive: false,
     score: 0,
     lives: STARTING_LIVES,
+    nextLifeScore: EXTRA_LIFE_SCORE_STEP,
+    extraLifeBannerTime: 0,
     levelIndex: 0,
     round: 1,
     bricks: buildBricks(LEVELS[0], 1),
@@ -250,6 +264,8 @@ function startGame() {
   function startRun() {
     game.score = 0;
     game.lives = STARTING_LIVES;
+    game.nextLifeScore = EXTRA_LIFE_SCORE_STEP;
+    game.extraLifeBannerTime = 0;
     game.levelIndex = 0;
     game.round = 1;
     game.isNewBest = false;
@@ -306,17 +322,31 @@ function startGame() {
     particles.emit(brick.x + brick.w / 2, brick.y + brick.h / 2, { count, spread: Math.PI * 2, speed: [15, 70], lifetime: [0.2, 0.6], sizes: [1, 1, 2], fall: 80 });
   }
 
+  function gainLife() {
+    game.lives = Math.min(game.lives + 1, MAX_LIVES);
+    game.extraLifeBannerTime = EXTRA_LIFE_BANNER_SECONDS;
+    sounds.extraLife();
+  }
+
+  function addScore(points) {
+    game.score += points;
+    while (game.score >= game.nextLifeScore) {
+      game.nextLifeScore += EXTRA_LIFE_SCORE_STEP;
+      gainLife();
+    }
+  }
+
   function maybeDropCapsule(brick) {
     if (game.capsule || game.balls.length > 1 || Math.random() >= DROP_CHANCE) {
       return;
     }
-    const powerUp = POWER_UPS[Math.floor(Math.random() * POWER_UPS.length)];
+    const powerUp = pickPowerUp();
     game.capsule = { x: brick.x + (brick.w - CAPSULE_WIDTH) / 2, y: brick.y, w: CAPSULE_WIDTH, h: CAPSULE_HEIGHT, powerUp };
   }
 
   function clearLevel() {
     game.lastBonus = LEVEL_CLEAR_SCORE * (game.levelIndex + 1) * game.round;
-    game.score += game.lastBonus;
+    addScore(game.lastBonus);
     clearFlyingObjects();
     glitch.trigger("goal");
     sounds.levelClear();
@@ -337,7 +367,7 @@ function startGame() {
     }
     brick.isAlive = false;
     game.bricksLeft -= 1;
-    game.score += BRICK_SCORE * brick.maxHp * game.round;
+    addScore(BRICK_SCORE * brick.maxHp * game.round);
     emitBrickBurst(brick, 14);
     if (game.bricksLeft <= 0) {
       clearLevel();
@@ -461,9 +491,13 @@ function startGame() {
   }
 
   function applyPowerUp(powerUp) {
-    game.score += POWER_UP_SCORE;
-    sounds.powerUp();
+    addScore(POWER_UP_SCORE);
     glitch.trigger("hit");
+    if (powerUp.id === "life") {
+      gainLife();
+      return;
+    }
+    sounds.powerUp();
     if (powerUp.id === "expand") {
       setPaddleWide(true);
     } else if (powerUp.id === "laser") {
@@ -703,6 +737,7 @@ function startGame() {
       return;
     }
     game.stateTime += deltaSeconds;
+    game.extraLifeBannerTime = Math.max(0, game.extraLifeBannerTime - deltaSeconds);
     particles.update(deltaSeconds);
     if (CONTROLLABLE_STATES.has(game.state)) {
       const keyboardDirection = (input.isKeyDown("ArrowRight", "KeyD") ? 1 : 0) - (input.isKeyDown("ArrowLeft", "KeyA") ? 1 : 0);
@@ -744,10 +779,24 @@ function startGame() {
   function drawHud() {
     drawText(buffer.context, String(game.score), 2, 3, { color: COLORS.score });
     drawCenteredText(levelLabel(), 3, { color: COLORS.dim });
-    const livesRight = menuButton.left - 5;
-    for (let life = 0; life < game.lives; life++) {
-      buffer.rect(livesRight - (life + 1) * 7 + 2, 5, 5, 2, COLORS.dim);
+    drawLives(menuButton.left - 5);
+  }
+
+  function drawLifeIcon(right) {
+    buffer.rect(right - 5, 5, 5, 2, COLORS.dim);
+  }
+
+  function drawLives(livesRight) {
+    if (game.lives <= MAX_LIFE_ICONS) {
+      for (let life = 0; life < game.lives; life++) {
+        drawLifeIcon(livesRight - life * 7);
+      }
+      return;
     }
+    const countText = `X${game.lives}`;
+    const countWidth = measureText(countText);
+    drawText(buffer.context, countText, livesRight - countWidth, 3, { color: COLORS.dim });
+    drawLifeIcon(livesRight - countWidth - 2);
   }
 
   function drawField() {
@@ -823,6 +872,9 @@ function startGame() {
       drawBannerText(`BONUS ${game.lastBonus}`, 116, COLORS.dim);
     } else if (scene === "lost" && game.lives > 0) {
       drawBannerText(`LIVES ${game.lives}`, 110, COLORS.dim);
+    }
+    if (game.extraLifeBannerTime > 0 && isBlinkOn()) {
+      drawBannerText("EXTRA LIFE", 125);
     }
   }
 
