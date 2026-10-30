@@ -10,3 +10,7 @@
   title: BREAKOUT
   tagline: SMASH ALL BRICKS
   url: /games/breakout/
+- id: bombarda
+  title: BOMBARDA
+  tagline: HIT THE TARGETS
+  url: /games/bombarda/

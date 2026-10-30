@@ -2,7 +2,7 @@ const TAP_MAX_MS = 250;
 const TAP_MAX_DISTANCE = 10;
 const LONG_PRESS_MS = 500;
 
-export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = () => {}, onKey = () => {}, onInteraction = () => {}, onMenu = () => {}, isMenuZone = () => false } = {}) {
+export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLongPress = () => {}, onKey = () => {}, onInteraction = () => {}, onMenu = () => {}, isMenuZone = () => false, onPress = () => {}, onRelease = () => {}, onKeyUp = () => {} } = {}) {
   const pressedKeys = new Set();
   let gesture = null;
 
@@ -35,6 +35,7 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
     if (gesture.isMenu) {
       return;
     }
+    onPress(event.clientX, event.clientY);
     gesture.longPressTimer = window.setTimeout(() => {
       if (gesture && !gesture.hasMoved) {
         gesture.isConsumed = true;
@@ -78,8 +79,11 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
       if (!gesture.hasMoved) {
         onMenu();
       }
-    } else if (!gesture.isConsumed && !gesture.hasMoved && duration <= TAP_MAX_MS) {
-      onTap(event.clientX, event.clientY);
+    } else {
+      onRelease(event.clientX, event.clientY, false);
+      if (!gesture.isConsumed && !gesture.hasMoved && duration <= TAP_MAX_MS) {
+        onTap(event.clientX, event.clientY);
+      }
     }
     gesture = null;
   }
@@ -87,6 +91,9 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
   function handlePointerCancel(event) {
     if (gesture && event.pointerId === gesture.pointerId) {
       cancelLongPress();
+      if (!gesture.isMenu) {
+        onRelease(event.clientX, event.clientY, true);
+      }
       gesture = null;
     }
   }
@@ -103,11 +110,15 @@ export function createInput(element, { onDrag = () => {}, onTap = () => {}, onLo
   }
 
   function handleKeyUp(event) {
-    pressedKeys.delete(event.code);
+    if (pressedKeys.delete(event.code)) {
+      onKeyUp(event.code);
+    }
   }
 
   function handleBlur() {
+    const releasedKeys = [...pressedKeys];
     pressedKeys.clear();
+    releasedKeys.forEach((code) => onKeyUp(code));
   }
 
   element.addEventListener("pointerdown", handlePointerDown);

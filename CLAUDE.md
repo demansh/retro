@@ -36,6 +36,7 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 - `glitch` effect scheduler: `trigger("tear" | "hit" | "goal")`, pass `uniforms()` to `crt.render`.
 - `input` gesture recognizer; call `audio.unlock()` from `onInteraction` (needed on iOS). Pass
   `isMenuZone: menuButton.containsClient` and `onMenu`: touches that start in the zone never reach game handlers.
+  Hold mechanics: `onPress` / `onRelease(x, y, isCancelled)` for pointers outside the menu zone, `onKeyUp` for keys.
 - `menubutton` `createMenuButton(display, WIDTH)`: `draw(buffer, color)` each frame, `left` to lay out the HUD.
 - `collision` (`overlaps`, `sweptAabb` — use swept for fast objects), `particles` (pooled pixel bursts),
   `audio` (synthesized square/noise SFX, no audio files, `setMuted`), `storage` (`createStore(id, version, defaults)`).
