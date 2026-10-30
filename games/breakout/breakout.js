@@ -52,6 +52,8 @@ const DROP_CHANCE = 0.2;
 const LASER_SPEED = 200;
 const LASER_HEIGHT = 4;
 const LASER_COOLDOWN_SECONDS = 0.3;
+const LASER_VOLLEYS = 10;
+const LASER_GAUGE_GAP = 1;
 const POWER_UP_SCORE = 50;
 const BRICK_SCORE = 10;
 const LEVEL_CLEAR_SCORE = 100;
@@ -177,7 +179,7 @@ function startGame() {
   const recordsStore = createStore("breakout", 1, { best: 0 });
   let records = sanitizeRecords(recordsStore.load());
 
-  const paddle = { x: 0, y: PADDLE_Y, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, isWide: false, hasLaser: false };
+  const paddle = { x: 0, y: PADDLE_Y, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, isWide: false, laserShots: 0 };
   const walls = [
     { x: -WIDTH, y: -HEIGHT, w: WIDTH * 3, h: HEIGHT + FIELD_TOP },
     { x: -WIDTH, y: -HEIGHT, w: WIDTH + FIELD_LEFT, h: HEIGHT * 3 },
@@ -244,7 +246,7 @@ function startGame() {
 
   function resetPaddleUpgrades() {
     setPaddleWide(false);
-    paddle.hasLaser = false;
+    paddle.laserShots = 0;
   }
 
   function clearFlyingObjects() {
@@ -501,7 +503,7 @@ function startGame() {
     if (powerUp.id === "expand") {
       setPaddleWide(true);
     } else if (powerUp.id === "laser") {
-      paddle.hasLaser = true;
+      paddle.laserShots = LASER_VOLLEYS;
     } else if (powerUp.id === "multi") {
       splitBalls();
     } else if (powerUp.id === "slow") {
@@ -524,10 +526,11 @@ function startGame() {
   }
 
   function fireLaser() {
-    if (!paddle.hasLaser || game.laserCooldown > 0) {
+    if (paddle.laserShots <= 0 || game.laserCooldown > 0) {
       return;
     }
     game.laserCooldown = LASER_COOLDOWN_SECONDS;
+    paddle.laserShots -= 1;
     [paddle.x + 1, paddle.x + paddle.w - 2].forEach((x) => game.lasers.push({ x, y: paddle.y - LASER_HEIGHT, w: 1, h: LASER_HEIGHT }));
     sounds.laser();
   }
@@ -816,10 +819,16 @@ function startGame() {
 
   function drawPaddle() {
     buffer.rect(paddle.x, paddle.y, paddle.w, paddle.h, COLORS.bright);
-    if (paddle.hasLaser) {
+    if (paddle.laserShots > 0) {
       buffer.rect(paddle.x + 1, paddle.y - 1, 1, 1, COLORS.bright);
       buffer.rect(paddle.x + paddle.w - 2, paddle.y - 1, 1, 1, COLORS.bright);
+      drawLaserGauge();
     }
+  }
+
+  function drawLaserGauge() {
+    const gaugeWidth = Math.max(1, Math.round((paddle.w * paddle.laserShots) / LASER_VOLLEYS));
+    buffer.rect(paddle.x, paddle.y + paddle.h + LASER_GAUGE_GAP, gaugeWidth, 1, COLORS.dim);
   }
 
   function drawCapsule(capsule) {
