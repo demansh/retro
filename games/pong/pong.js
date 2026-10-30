@@ -93,7 +93,6 @@ function createSounds(audio) {
 function startGame() {
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
-  const portraitQuery = window.matchMedia("(orientation: portrait) and (pointer: coarse)");
   const isStandalone = window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone === true;
   const homeUrl = document.body.dataset.home || "/";
 
@@ -467,17 +466,14 @@ function startGame() {
     if (typeof root.requestFullscreen !== "function") {
       return;
     }
-    root
-      .requestFullscreen({ navigationUI: "hide" })
-      .then(() => window.screen.orientation?.lock?.("landscape"))
-      .catch((error) => console.info("Fullscreen or orientation lock is unavailable", error));
+    root.requestFullscreen({ navigationUI: "hide" }).catch((error) => console.info("Fullscreen is unavailable", error));
   }
 
   const input = createInput(document.querySelector(".game-stage"), {
     onInteraction: () => audio.unlock(),
     onDrag: (deltaX, deltaY) => {
       if (CONTROLLABLE_STATES.has(game.state)) {
-        movePlayer(deltaY * display.cssToBufferScale() * DRAG_SENSITIVITY);
+        movePlayer(deltaY * display.gestureScale() * DRAG_SENSITIVITY);
       }
     },
     onTap: (clientX, clientY) => {
@@ -655,12 +651,6 @@ function startGame() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      pause();
-    }
-  });
-
-  portraitQuery.addEventListener("change", (event) => {
-    if (event.matches) {
       pause();
     }
   });

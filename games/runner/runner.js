@@ -147,7 +147,6 @@ function createStars() {
 function startGame() {
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
-  const portraitQuery = window.matchMedia("(orientation: portrait) and (pointer: coarse)");
   const isStandalone = window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone === true;
   const homeUrl = document.body.dataset.home || "/";
 
@@ -652,7 +651,7 @@ function startGame() {
     if (game.state !== "play") {
       return;
     }
-    swipe.accumulated += deltaY * display.cssToBufferScale();
+    swipe.accumulated += deltaY * display.gestureScale();
     if (swipe.accumulated > SWIPE_THRESHOLD) {
       swipe.accumulated = 0;
       startDuck();
@@ -677,10 +676,7 @@ function startGame() {
     if (typeof root.requestFullscreen !== "function") {
       return;
     }
-    root
-      .requestFullscreen({ navigationUI: "hide" })
-      .then(() => window.screen.orientation?.lock?.("landscape"))
-      .catch((error) => console.info("Fullscreen or orientation lock is unavailable", error));
+    root.requestFullscreen({ navigationUI: "hide" }).catch((error) => console.info("Fullscreen is unavailable", error));
   }
 
   const input = createInput(document.querySelector(".game-stage"), {
@@ -961,12 +957,6 @@ function startGame() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      pause();
-    }
-  });
-
-  portraitQuery.addEventListener("change", (event) => {
-    if (event.matches) {
       pause();
     }
   });

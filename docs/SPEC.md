@@ -90,11 +90,12 @@ manifest.webmanifest  sw.js
 - Рекорд: лучший счёт.
 
 ### 7. Ориентация и PWA
-- По умолчанию игра альбомная. В портретной ориентации показывается ЭЛТ-заглушка `ROTATE DEVICE`
-  с анимированной иконкой, игра при этом на паузе. Игра с `orientation: portrait` в front matter (Breakout)
-  работает наоборот: заглушка появляется в альбомной ориентации, а lock делается на `portrait`.
-- `screen.orientation.lock` пробуется только в fullscreen/standalone, ошибка игнорируется.
-- `manifest.webmanifest`: display `fullscreen`, orientation `landscape`, иконки 192/512.
+- Все игры работают в обеих ориентациях. Буфер вписывается с сохранением пропорций, остаток экрана чёрный.
+  Предпочтительная ориентация альбомная, у Breakout портретная (`orientation: portrait` в front matter).
+  В другой ориентации на несколько секунд проступает неблокирующая подсказка `ROTATE FOR FULL SCREEN`.
+- Ориентация не блокируется, поворот не ставит игру на паузу. Чувствительность жестов (`gestureScale`)
+  считается так, будто игра развёрнута на весь экран, поэтому не зависит от ориентации.
+- `manifest.webmanifest`: display `fullscreen`, orientation `any`, иконки 192/512.
 - `sw.js`: стратегия cache-first. Список файлов генерирует Liquid из `site.static_files`,
   версия кэша — `site.time`.
 

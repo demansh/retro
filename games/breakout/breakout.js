@@ -150,7 +150,6 @@ function buildBricks(layout, round) {
 function startGame() {
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
-  const landscapeQuery = window.matchMedia("(orientation: landscape) and (pointer: coarse)");
   const isStandalone = window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone === true;
   const homeUrl = document.body.dataset.home || "/";
 
@@ -568,20 +567,11 @@ function startGame() {
     }
   }
 
-  function releaseOrientation() {
-    try {
-      window.screen.orientation?.unlock?.();
-    } catch (error) {
-      console.info("Orientation unlock is unavailable", error);
-    }
-  }
-
   function exitToMenu() {
     if (game.isExiting) {
       return;
     }
     game.isExiting = true;
-    releaseOrientation();
     const navigate = () => window.location.assign(homeUrl);
     const fallbackTimer = window.setTimeout(navigate, EXIT_FALLBACK_MS);
     crt.powerOff().then(() => {
@@ -673,26 +663,23 @@ function startGame() {
     }
   }
 
-  function lockPortrait() {
-    return window.screen.orientation?.lock?.("portrait");
-  }
-
   function requestImmersive() {
-    if (game.hasRequestedImmersive || !isTouchDevice) {
+    if (game.hasRequestedImmersive || !isTouchDevice || isStandalone || document.fullscreenElement) {
       return;
     }
     game.hasRequestedImmersive = true;
     const root = document.documentElement;
-    const canRequestFullscreen = !isStandalone && !document.fullscreenElement && typeof root.requestFullscreen === "function";
-    const immersive = canRequestFullscreen ? root.requestFullscreen({ navigationUI: "hide" }) : Promise.resolve();
-    immersive.then(lockPortrait).catch((error) => console.info("Fullscreen or orientation lock is unavailable", error));
+    if (typeof root.requestFullscreen !== "function") {
+      return;
+    }
+    root.requestFullscreen({ navigationUI: "hide" }).catch((error) => console.info("Fullscreen is unavailable", error));
   }
 
   const input = createInput(document.querySelector(".game-stage"), {
     onInteraction: () => audio.unlock(),
     onDrag: (deltaX) => {
       if (CONTROLLABLE_STATES.has(game.state)) {
-        movePaddle(deltaX * display.cssToBufferScale() * DRAG_SENSITIVITY);
+        movePaddle(deltaX * display.gestureScale() * DRAG_SENSITIVITY);
       }
     },
     onTap: (clientX, clientY) => {
@@ -916,12 +903,6 @@ function startGame() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      pause();
-    }
-  });
-
-  landscapeQuery.addEventListener("change", (event) => {
-    if (event.matches) {
       pause();
     }
   });

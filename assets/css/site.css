@@ -350,66 +350,48 @@ button.menu__item {
   filter: drop-shadow(0 0 6px rgba(var(--phosphor-rgb), 0.35));
 }
 
-.rotate-notice {
+.orientation-hint {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: max(1.5em, env(safe-area-inset-bottom));
   z-index: 10;
   display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1em;
-  font-size: 1.4em;
+  margin: 0;
+  padding: 0 1em;
+  text-align: center;
+  pointer-events: none;
+  animation: orientation-hint-fade 5s linear forwards;
 }
 
-.rotate-notice > * {
-  position: relative;
-  z-index: 1;
+.orientation-hint--portrait {
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  width: calc((100vw - 100vh * 9 / 16) / 2);
+  box-sizing: border-box;
+  transform: translateY(-50%);
 }
 
-.rotate-notice__icon {
-  width: 2.2em;
-  height: 3.4em;
-  border: 0.2em solid var(--color-phosphor);
-  box-shadow: var(--glow);
-  animation: rotate-hint 2.4s steps(4) infinite;
-}
-
-@keyframes rotate-hint {
+@keyframes orientation-hint-fade {
   0%,
-  40% {
-    transform: rotate(0deg);
+  70% {
+    opacity: 0.7;
   }
-  60%,
   100% {
-    transform: rotate(-90deg);
-  }
-}
-
-.rotate-notice--portrait .rotate-notice__icon {
-  animation-name: rotate-hint-portrait;
-}
-
-@keyframes rotate-hint-portrait {
-  0%,
-  40% {
-    transform: rotate(-90deg);
-  }
-  60%,
-  100% {
-    transform: rotate(0deg);
+    opacity: 0;
   }
 }
 
 @media (orientation: portrait) and (pointer: coarse) {
-  .rotate-notice:not(.rotate-notice--portrait) {
-    display: flex;
+  .orientation-hint:not(.orientation-hint--portrait) {
+    display: block;
   }
 }
 
 @media (orientation: landscape) and (pointer: coarse) {
-  .rotate-notice--portrait {
-    display: flex;
+  .orientation-hint--portrait {
+    display: block;
   }
 }
 
@@ -426,9 +408,7 @@ button.menu__item {
 @media (prefers-reduced-motion: reduce) {
   .crt,
   .crt::after,
-  .terminal__screen,
-  .rotate-notice__icon,
-  .rotate-notice--portrait .rotate-notice__icon {
+  .terminal__screen {
     animation: none;
   }
 

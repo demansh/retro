@@ -11,9 +11,12 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
   only via `EXIT` in the pause menu. Never add edge swipes (from any screen edge) as a system gesture: they clash
   with OS back/notification gestures. All other gestures (drag, tap, long press, swipes) belong to the game.
   Keyboard is a desktop extra (Esc = pause).
-- Landscape by default: portrait on touch devices shows the `ROTATE DEVICE` notice (`_layouts/game.html` CSS).
-  A game can opt into portrait with `orientation: portrait` in front matter (see `games/breakout`): the notice
-  then shows in landscape, the game pauses on `(orientation: landscape) and (pointer: coarse)` and locks `portrait`.
+- Every game works in both orientations. The buffer is letterboxed with black (`createDisplay`), never rotated.
+  The preferred orientation is landscape, or portrait via `orientation: portrait` in front matter (see
+  `games/breakout`). In the other orientation `_layouts/game.html` fades in a non-blocking `ROTATE FOR FULL SCREEN`
+  hint. Never lock orientation, never pause on rotation; `manifest.webmanifest` stays `orientation: any`.
+- Scale drags and swipes with `display.gestureScale()` (not `cssToBufferScale()`), so gesture sensitivity is the same
+  in both orientations.
 - UI text is English uppercase (VT323 and the pixel font have no Cyrillic).
 - Budget: a game page must stay under 100 KB gzip.
 
@@ -59,4 +62,5 @@ Static Jekyll site (GitHub Pages) with tiny retro games on a green phosphor CRT.
 
 ## Verify
 - `jekyll serve`, open `http://127.0.0.1:4000/retro/`.
-- Check in a landscape mobile viewport with touch emulation; check portrait shows the rotate notice.
+- Check in landscape and portrait mobile viewports with touch emulation: the game is letterboxed and playable,
+  the rotate hint shows only in the non-preferred orientation and fades out.

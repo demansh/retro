@@ -52,9 +52,21 @@ export function createDisplay(canvas, width, height, onResize = () => {}) {
     return cssHeight > 0 ? height / cssHeight : 1;
   }
 
+  function fittedWidth(viewportWidth, viewportHeight) {
+    return Math.min(viewportWidth, viewportHeight * aspect);
+  }
+
+  function gestureScale() {
+    if (!window.matchMedia("(pointer: coarse)").matches) {
+      return cssToBufferScale();
+    }
+    const bestWidth = Math.max(fittedWidth(window.innerWidth, window.innerHeight), fittedWidth(window.innerHeight, window.innerWidth));
+    return bestWidth > 0 ? width / bestWidth : 1;
+  }
+
   window.addEventListener("resize", resize);
   window.addEventListener("orientationchange", resize);
   resize();
 
-  return { canvas, resize, clientToBuffer, cssToBufferScale };
+  return { canvas, resize, clientToBuffer, cssToBufferScale, gestureScale };
 }
