@@ -165,7 +165,7 @@ function startGame() {
   const recordsStore = createStore("breakout", 1, { best: 0 });
   let records = sanitizeRecords(recordsStore.load());
 
-  const paddle = { x: 0, y: PADDLE_Y, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, mode: "normal" };
+  const paddle = { x: 0, y: PADDLE_Y, w: PADDLE_WIDTH, h: PADDLE_HEIGHT, isWide: false, hasLaser: false };
   const walls = [
     { x: -WIDTH, y: -HEIGHT, w: WIDTH * 3, h: HEIGHT + FIELD_TOP },
     { x: -WIDTH, y: -HEIGHT, w: WIDTH + FIELD_LEFT, h: HEIGHT * 3 },
@@ -221,11 +221,16 @@ function startGame() {
     paddle.x = clampPaddleX(WIDTH / 2 - paddle.w / 2);
   }
 
-  function setPaddleMode(mode) {
+  function setPaddleWide(isWide) {
     const centerX = paddle.x + paddle.w / 2;
-    paddle.mode = mode;
-    paddle.w = mode === "wide" ? WIDE_PADDLE_WIDTH : PADDLE_WIDTH;
+    paddle.isWide = isWide;
+    paddle.w = isWide ? WIDE_PADDLE_WIDTH : PADDLE_WIDTH;
     paddle.x = clampPaddleX(centerX - paddle.w / 2);
+  }
+
+  function resetPaddleUpgrades() {
+    setPaddleWide(false);
+    paddle.hasLaser = false;
   }
 
   function clearFlyingObjects() {
@@ -238,7 +243,6 @@ function startGame() {
     game.bricks = buildBricks(LEVELS[game.levelIndex], game.round);
     game.bricksLeft = game.bricks.filter((brick) => !brick.isSolid).length;
     clearFlyingObjects();
-    setPaddleMode("normal");
     centerPaddle();
     setState("serve");
   }
@@ -250,6 +254,7 @@ function startGame() {
     game.round = 1;
     game.isNewBest = false;
     particles.clear();
+    resetPaddleUpgrades();
     loadLevel();
   }
 
@@ -410,7 +415,7 @@ function startGame() {
   function loseLife() {
     game.lives -= 1;
     clearFlyingObjects();
-    setPaddleMode("normal");
+    resetPaddleUpgrades();
     glitch.trigger("goal");
     sounds.lifeLost();
     particles.emit(paddle.x + paddle.w / 2, paddle.y, { count: 40, angle: -Math.PI / 2, spread: Math.PI, speed: [30, 110], lifetime: [0.4, 1], sizes: [1, 2], fall: 90 });
@@ -460,9 +465,9 @@ function startGame() {
     sounds.powerUp();
     glitch.trigger("hit");
     if (powerUp.id === "expand") {
-      setPaddleMode("wide");
+      setPaddleWide(true);
     } else if (powerUp.id === "laser") {
-      setPaddleMode("laser");
+      paddle.hasLaser = true;
     } else if (powerUp.id === "multi") {
       splitBalls();
     } else if (powerUp.id === "slow") {
@@ -485,7 +490,7 @@ function startGame() {
   }
 
   function fireLaser() {
-    if (paddle.mode !== "laser" || game.laserCooldown > 0) {
+    if (!paddle.hasLaser || game.laserCooldown > 0) {
       return;
     }
     game.laserCooldown = LASER_COOLDOWN_SECONDS;
@@ -762,7 +767,7 @@ function startGame() {
 
   function drawPaddle() {
     buffer.rect(paddle.x, paddle.y, paddle.w, paddle.h, COLORS.bright);
-    if (paddle.mode === "laser") {
+    if (paddle.hasLaser) {
       buffer.rect(paddle.x + 1, paddle.y - 1, 1, 1, COLORS.bright);
       buffer.rect(paddle.x + paddle.w - 2, paddle.y - 1, 1, 1, COLORS.bright);
     }
